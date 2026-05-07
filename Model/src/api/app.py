@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level references, set during lifespan
 _pipeline: Optional[InferencePipeline] = None
+_multimodal_predictor = None  # Optional MultimodalPredictor
 _tracker: Optional[ExperimentTracker] = None
 _pipeline_lock = threading.Lock()  # BP-1: Thread safety for concurrent requests
 
@@ -102,7 +103,7 @@ def _init_pipeline(config: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: load model + DB. Shutdown: release resources."""
-    global _pipeline, _tracker
+    global _pipeline, _tracker, _multimodal_predictor
 
     config_path = getattr(app.state, "config_path", DEFAULT_CONFIG_PATH)
     logger.info(f"[API] Loading config from: {config_path}")
@@ -110,6 +111,21 @@ async def lifespan(app: FastAPI):
     config = _load_config(config_path)
     _pipeline = _init_pipeline(config)
     logger.info("[API] Inference pipeline loaded — ready to serve")
+
+    # Initialize multimodal predictor (optional — graceful if fails)
+    try:
+        from src.inference.multimodal_pipeline import MultimodalPredictor
+        ckpt_path = config.get("artifacts", {}).get(
+            "trimodal_checkpoint", "checkpoints/trimodal_fusion.pt"
+        )
+        device = config.get("inference", {}).get("device", "auto")
+        _multimodal_predictor = MultimodalPredictor(
+            checkpoint_path=ckpt_path, device=device
+        )
+        logger.info("[API] MultimodalPredictor initialized")
+    except Exception as e:
+        logger.warning(f"[API] MultimodalPredictor init failed (will use fallback): {e}")
+        _multimodal_predictor = None
 
     # Initialize DB tracker (creates tables if needed)
     try:
@@ -125,6 +141,7 @@ async def lifespan(app: FastAPI):
     yield
 
     _pipeline = None
+    _multimodal_predictor = None
     _tracker = None
     logger.info("[API] Shutdown complete")
 

@@ -97,7 +97,7 @@ class FusionPredictor:
             "model_version": self._compute_version(ckpt),
             "has_audio_branch": has_audio_branch,
         }
-        self.use_fusion = bool(has_audio_branch)
+        self.use_fusion = bool(use_audio_encoder)
 
         total = sum(p.numel() for p in self.model.parameters())
         ccc_label = f"{self.metadata['val_ccc']:.4f}" if self.metadata["val_ccc"] is not None else "unknown"
@@ -286,7 +286,13 @@ class FusionPredictor:
         mean = features.mean(axis=0, keepdims=True)
         std = features.std(axis=0, keepdims=True)
         std = np.where(std < eps, 1.0, std)
-        return ((features - mean) / std).astype(np.float32)
+        normalized = (features - mean) / std
+        return np.nan_to_num(
+            normalized.astype(np.float32),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
 
     @staticmethod
     def _validate_features(text: np.ndarray, mfcc: np.ndarray, egemaps: np.ndarray) -> None:

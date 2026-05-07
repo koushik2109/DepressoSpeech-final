@@ -129,3 +129,31 @@ async def _run_sqlite_migrations(conn):
             """
         )
     )
+
+    # Migrate existing doctor_assignments into consultations on first boot
+    count_result = await conn.execute(text("SELECT COUNT(*) FROM consultations"))
+    consultation_count = count_result.scalar()
+    if consultation_count == 0:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO consultations (
+                    id, doctor_id, patient_id, assessment_id, doctor_assignment_id,
+                    status, created_at, updated_at, started_at, ended_at, stop_reason
+                )
+                SELECT
+                    id, doctor_id, patient_id, assessment_id, id,
+                    CASE
+                        WHEN status = 'accepted' THEN 'active'
+                        WHEN status = 'completed' THEN 'completed'
+                        WHEN status = 'rejected' THEN 'rejected'
+                        ELSE 'pending'
+                    END,
+                    created_at, created_at,
+                    CASE WHEN status = 'accepted' THEN created_at ELSE NULL END,
+                    CASE WHEN status IN ('completed', 'rejected') THEN created_at ELSE NULL END,
+                    NULL
+                FROM doctor_assignments
+                """
+            )
+        )

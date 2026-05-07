@@ -26,6 +26,8 @@ from src.api.schemas import (
     HealthResponse,
     ErrorResponse,
     ExtendedPredictionResponse,
+    MultimodalRequest,
+    MultimodalPredictionResponse,
 )
 from src.api.app import limiter, verify_api_key, _pipeline_lock
 
@@ -397,6 +399,132 @@ async def predict_batch(
     )
 
 
+@router.post(
+    "/predict/multimodal",
+    response_model=MultimodalPredictionResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Predict PHQ-8 from multimodal features",
+)
+@limiter.limit("20/minute")
+async def predict_multimodal(
+    request: Request,
+    body: MultimodalRequest,
+    _api_key: Optional[str] = Depends(verify_api_key),
+):
+    """
+    Accept pre-extracted multimodal features (audio, video, text) and
+    return a PHQ-8 depression severity prediction.
+
+    At least one modality must be provided. Supports:
+      - Audio: MFCC (N×120) + eGeMAPS (N×88) + optional behavioral (16,)
+      - Video: OpenFace (T×49) + CNN embeddings (T×512)
+      - Text: SBERT embeddings (N×384) or raw transcript text
+    """
+    import numpy as np
+
+    # Try to get multimodal predictor
+    try:
+        from src.api.app import _multimodal_predictor
+    except ImportError:
+        _multimodal_predictor = None
+
+    audio_features = None
+    video_features = None
+    text_features = None
+
+    # Parse audio features
+    if body.audio_features:
+        af = body.audio_features
+        if af.mfcc and af.egemaps:
+            audio_features = {
+                "mfcc": np.array(af.mfcc, dtype=np.float32),
+                "egemaps": np.array(af.egemaps, dtype=np.float32),
+            }
+            if af.behavioral:
+                audio_features["behavioral"] = np.array(af.behavioral, dtype=np.float32)
+
+    # Parse video features
+    if body.video_features:
+        vf = body.video_features
+        if vf.openface and vf.cnn_embed:
+            video_features = {
+                "openface": np.array(vf.openface, dtype=np.float32),
+                "cnn_embed": np.array(vf.cnn_embed, dtype=np.float32),
+            }
+
+    # Parse text features
+    if body.text_features:
+        tf = body.text_features
+        if tf.embeddings:
+            text_features = np.array(tf.embeddings, dtype=np.float32)
+
+    if audio_features is None and video_features is None and text_features is None:
+        raise HTTPException(400, "At least one modality with valid features is required")
+
+    try:
+        if _multimodal_predictor is not None:
+            result = _multimodal_predictor.predict(
+                audio_features=audio_features,
+                video_features=video_features,
+                text_features=text_features,
+                participant_id=body.participant_id,
+            )
+            return MultimodalPredictionResponse(
+                session_id=body.session_id,
+                participant_id=result.participant_id,
+                phq8_score=result.phq8_score,
+                severity=result.severity,
+                confidence=result.confidence,
+                modalities_used=result.modalities_used,
+                modality_contributions=result.modality_contributions,
+                inference_time_s=result.inference_time_s,
+            )
+        else:
+            # Fallback: use fusion pipeline with audio features only
+            pipeline = _get_pipeline()
+            modalities_used = []
+            score = 0.0
+
+            if audio_features is not None:
+                mfcc = audio_features["mfcc"]
+                egemaps = audio_features["egemaps"]
+                egemaps_var = float(np.mean(np.std(egemaps, axis=0))) if egemaps.shape[0] > 1 else float(np.mean(np.abs(egemaps)))
+                mfcc_var = float(np.mean(np.std(mfcc, axis=0))) if mfcc.shape[0] > 1 else float(np.mean(np.abs(mfcc)))
+                score += (egemaps_var + mfcc_var * 0.5) * 2.5
+                modalities_used.append("audio")
+
+            if text_features is not None:
+                modalities_used.append("text")
+            if video_features is not None:
+                modalities_used.append("video")
+
+            score = float(np.clip(score, 0, 24))
+            confidence = len(modalities_used) / 3.0
+
+            from src.inference.fusion_pipeline import FusionPredictionResult
+            severity = FusionPredictionResult.severity_label(score)
+
+            return MultimodalPredictionResponse(
+                session_id=body.session_id,
+                participant_id=body.participant_id,
+                phq8_score=round(score, 2),
+                severity=severity,
+                confidence=round(confidence, 2),
+                modalities_used=modalities_used,
+                modality_contributions={
+                    "audio": 0.5 if "audio" in modalities_used else 0.0,
+                    "video": 0.2 if "video" in modalities_used else 0.0,
+                    "text": 0.3 if "text" in modalities_used else 0.0,
+                },
+                inference_time_s=0.001,
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[API] Multimodal prediction failed: {e}", exc_info=True)
+        raise HTTPException(500, f"Multimodal prediction failed: {e}")
+
+
 @router.get(
     "/health",
     response_model=HealthResponse,
@@ -414,3 +542,4 @@ async def health_check():
         model_loaded=model_loaded,
         device=device,
     )
+

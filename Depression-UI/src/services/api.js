@@ -71,12 +71,16 @@ const _inflight = new Map();
 // ── HTTP helper ─────────────────────────────────────────
 
 async function apiFetch(path, options = {}) {
-  const { skipCache = false, ...fetchOptions } = options;
+  const { skipCache = false, rawBody = false, timeout, ...fetchOptions } = options;
   const session = readJson(sessionStore, SESSION_KEY);
   const headers = {
-    "Content-Type": "application/json",
+    ...(rawBody ? {} : { "Content-Type": "application/json" }),
     ...fetchOptions.headers,
   };
+  // Remove Content-Type for FormData (browser sets it with boundary)
+  if (rawBody && headers["Content-Type"]) {
+    delete headers["Content-Type"];
+  }
   if (session?.token) {
     headers["Authorization"] = `Bearer ${session.token}`;
   }
@@ -98,12 +102,31 @@ async function apiFetch(path, options = {}) {
   }
 
   const fetchPromise = (async () => {
-    const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed (${res.status})`);
+    const controller = new AbortController();
+    const timeoutMs = timeout || 60000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...fetchOptions,
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed (${res.status})`);
+      }
+      if (res.status === 204) return null;
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    } finally {
+      clearTimeout(timer);
     }
-    return res.json();
   })();
 
   if (canUseCache) {
@@ -550,6 +573,10 @@ export async function uploadAudio(blob, filename = "recording.webm") {
   return res.json();
 }
 
+/**
+ * Fetch audio and create a blob URL.
+ * Callers are responsible for revoking the returned URL when it is no longer used.
+ */
 export async function getAudioBlobUrl(fileId) {
   const session = readJson(sessionStore, SESSION_KEY);
   const adminSession = readJson(sessionStore, ADMIN_SESSION_KEY);
@@ -565,7 +592,12 @@ export async function getAudioBlobUrl(fileId) {
   }
 
   const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  return { url, blob };
+}
+
+export function revokeBlobUrl(url) {
+  if (url) URL.revokeObjectURL(url);
 }
 
 // ── ML Details & Monitoring ────────────────────────────
@@ -589,3 +621,222 @@ export async function getAdminMetrics() {
 export async function getMLHealth() {
   return apiFetch("/admin/dashboard/ml-health");
 }
+
+// ── Multimodal API ─────────────────────────────────────
+
+/**
+ * Trigger multimodal depression prediction.
+ * Accepts inline features (JSON arrays) for any combination of modalities.
+ *
+ * @param {Object} payload
+ * @param {Object} [payload.audio_features] - {mfcc: number[][], egemaps: number[][], behavioral?: number[]}
+ * @param {Object} [payload.video_features] - {openface: number[][], cnn_embed: number[][]}
+ * @param {Object} [payload.text_features]  - {embeddings?: number[][], raw_text?: string}
+ * @param {string} [payload.session_id]     - Existing session to add features to
+ * @returns {Promise<Object>} Prediction result with modality contributions
+ */
+export async function processMultimodal(payload) {
+  return apiFetch("/multimodal/process/multimodal", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+    skipCache: true,
+  });
+}
+
+/**
+ * Upload audio feature files for a multimodal session.
+ *
+ * @param {Object} params
+ * @param {string} [params.sessionId]     - Existing session ID
+ * @param {File}   [params.mfccFile]      - MFCC features CSV
+ * @param {File}   [params.egemapsFile]   - eGeMAPS features CSV
+ * @param {File}   [params.behavioralFile] - Behavioral features CSV
+ */
+export async function uploadMultimodalAudio({ sessionId, mfccFile, egemapsFile, behavioralFile }) {
+  const form = new FormData();
+  if (sessionId) form.append("session_id", sessionId);
+  if (mfccFile) form.append("mfcc_file", mfccFile);
+  if (egemapsFile) form.append("egemaps_file", egemapsFile);
+  if (behavioralFile) form.append("behavioral_file", behavioralFile);
+  return apiFetch("/multimodal/upload/audio", {
+    method: "POST",
+    body: form,
+    skipCache: true,
+    rawBody: true,
+  });
+}
+
+/**
+ * Upload video feature files for a multimodal session.
+ *
+ * @param {Object} params
+ * @param {string} [params.sessionId]     - Existing session ID
+ * @param {File}   [params.openfaceFile]  - OpenFace features CSV
+ * @param {File}   [params.cnnFile]       - CNN embedding CSV
+ */
+export async function uploadMultimodalVideo({ sessionId, openfaceFile, cnnFile }) {
+  const form = new FormData();
+  if (sessionId) form.append("session_id", sessionId);
+  if (openfaceFile) form.append("openface_file", openfaceFile);
+  if (cnnFile) form.append("cnn_file", cnnFile);
+  return apiFetch("/multimodal/upload/video", {
+    method: "POST",
+    body: form,
+    skipCache: true,
+    rawBody: true,
+  });
+}
+
+/**
+ * Upload text features for a multimodal session.
+ *
+ * @param {Object} params
+ * @param {string} [params.sessionId]  - Existing session ID
+ * @param {File}   [params.textFile]   - Text embeddings CSV
+ * @param {string} [params.rawText]    - Raw transcript text
+ */
+export async function uploadMultimodalText({ sessionId, textFile, rawText }) {
+  const form = new FormData();
+  if (sessionId) form.append("session_id", sessionId);
+  if (textFile) form.append("text_file", textFile);
+  if (rawText) form.append("raw_text", rawText);
+  return apiFetch("/multimodal/upload/text", {
+    method: "POST",
+    body: form,
+    skipCache: true,
+    rawBody: true,
+  });
+}
+
+/**
+ * Get multimodal prediction results.
+ * @param {string} sessionId
+ */
+export async function getMultimodalResults(sessionId) {
+  return apiFetch(`/multimodal/results/${sessionId}`, { skipCache: true });
+}
+
+/**
+ * Get multimodal processing status.
+ * @param {string} sessionId
+ */
+export async function getMultimodalStatus(sessionId) {
+  return apiFetch(`/multimodal/status/${sessionId}`, { skipCache: true });
+}
+
+/**
+ * Upload a recorded video for multimodal depression prediction.
+ * The backend extracts audio, video frames, and optionally transcribes
+ * speech, then runs the trimodal fusion model.
+ *
+ * @param {Blob} videoBlob - Recorded video blob (webm/mp4)
+ * @param {string} [filename="recording.webm"] - Original filename
+ * @param {boolean} [enableSTT=true] - Enable speech-to-text
+ * @returns {Promise<Object>} Prediction result with modality contributions
+ */
+export async function processVideoRecording(videoBlob, filename = "recording.webm", enableSTT = true) {
+  const form = new FormData();
+  form.append("file", videoBlob, filename);
+  form.append("enable_stt", enableSTT.toString());
+  return apiFetch("/multimodal/process/video", {
+    method: "POST",
+    body: form,
+    skipCache: true,
+    rawBody: true,
+    timeout: 180000,  // 3 min timeout for video processing
+  });
+}
+
+// ── Consultation Management ────────────────────────────
+
+/**
+ * Get the current active consultation for the patient.
+ * @returns {Promise<Object>} Active consultation or null
+ */
+export async function getActiveConsultation() {
+  return apiFetch("/consultations/active", { skipCache: true });
+}
+
+/**
+ * Get consultation history for the patient.
+ * @returns {Promise<Object>} List of past consultations
+ */
+export async function getConsultationHistory() {
+  return apiFetch("/consultations/history", { skipCache: true });
+}
+
+/**
+ * Stop an active consultation.
+ * @param {string} consultationId
+ * @returns {Promise<Object>} Updated consultation
+ */
+export async function stopConsultation(consultationId) {
+  invalidateCache("consultations/");
+  return apiFetch(`/consultations/${consultationId}/stop`, {
+    method: "POST",
+    skipCache: true,
+  });
+}
+
+/**
+ * List all consultations for the patient.
+ * @param {string} [status] - Filter by status (pending, active, stopped, completed, etc.)
+ * @returns {Promise<Object>} List of consultations
+ */
+export async function listConsultations(status) {
+  const query = status ? `?status_filter=${encodeURIComponent(status)}` : "";
+  return apiFetch(`/consultations${query}`, { skipCache: true });
+}
+
+// ── Batch Processing API ──────────────────────────────
+
+/**
+ * Run batch processing for multiple participants.
+ *
+ * @param {Object} params
+ * @param {string[]} params.participant_ids - Array of participant IDs to process
+ * @param {string} [params.data_root] - Optional root path to raw data directory
+ * @param {boolean} [params.include_transcript=true] - Include transcript features
+ * @returns {Promise<Object>} Batch processing results
+ */
+export async function processBatch({ participant_ids, data_root, include_transcript = true }) {
+  return apiFetch("/multimodal/process/batch", {
+    method: "POST",
+    body: JSON.stringify({ participant_ids, data_root, include_transcript }),
+    headers: { "Content-Type": "application/json" },
+    skipCache: true,
+    timeout: 300000, // 5 min timeout for batch processing
+  });
+}
+
+/**
+ * Process pre-extracted features for a single participant.
+ *
+ * @param {Object} params
+ * @param {string} params.participant_id - Participant identifier
+ * @param {number[][]} [params.egemaps_data] - eGeMAPS features
+ * @param {number[][]} [params.mfcc_data] - MFCC features
+ * @param {string} [params.transcript_text] - Raw transcript text
+ * @returns {Promise<Object>} Prediction result
+ */
+export async function processFeatures({ participant_id, egemaps_data, mfcc_data, transcript_text }) {
+  return apiFetch("/multimodal/process/features", {
+    method: "POST",
+    body: JSON.stringify({ participant_id, egemaps_data, mfcc_data, transcript_text }),
+    headers: { "Content-Type": "application/json" },
+    skipCache: true,
+    timeout: 120000,
+  });
+}
+
+/**
+ * Get batch processing history.
+ *
+ * @param {number} [limit=20] - Maximum number of items to return
+ * @returns {Promise<Object>} Batch history items
+ */
+export async function getBatchHistory(limit = 20) {
+  return apiFetch(`/multimodal/batch/history?limit=${limit}`, { skipCache: true });
+}
+

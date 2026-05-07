@@ -83,3 +83,50 @@ class ExtendedPredictionResponse(BaseModel):
     confidence: dict = Field(..., description="MC Dropout uncertainty: mean, std, ci_lower, ci_upper")
     audio_quality: dict = Field(..., description="Audio quality metrics: rms, snr_db, speech_prob, quality")
     behavioral: dict = Field(..., description="Behavioral features extracted from audio")
+
+
+# ── Multimodal Schemas ────────────────────────────────
+
+class MultimodalAudioInput(BaseModel):
+    """Audio features as JSON arrays."""
+    mfcc: Optional[List[List[float]]] = Field(None, description="MFCC features (N×120)")
+    egemaps: Optional[List[List[float]]] = Field(None, description="eGeMAPS features (N×88)")
+    behavioral: Optional[List[float]] = Field(None, description="Behavioral features (16,)")
+
+
+class MultimodalVideoInput(BaseModel):
+    """Video features as JSON arrays."""
+    openface: Optional[List[List[float]]] = Field(None, description="OpenFace features (T×49)")
+    cnn_embed: Optional[List[List[float]]] = Field(None, description="CNN embeddings (T×512)")
+
+
+class MultimodalTextInput(BaseModel):
+    """Text features."""
+    raw_text: Optional[str] = Field(None, description="Raw transcript text")
+    embeddings: Optional[List[List[float]]] = Field(None, description="Pre-extracted text embeddings (N×384)")
+
+
+class MultimodalRequest(BaseModel):
+    """Full multimodal prediction request."""
+    session_id: Optional[str] = Field(None, description="Session identifier")
+    participant_id: str = Field("unknown", description="Participant identifier")
+    audio_features: Optional[MultimodalAudioInput] = None
+    video_features: Optional[MultimodalVideoInput] = None
+    text_features: Optional[MultimodalTextInput] = None
+
+
+class MultimodalPredictionResponse(BaseModel):
+    """Multimodal prediction response."""
+    session_id: Optional[str] = None
+    participant_id: str
+    phq8_score: float = Field(..., ge=0.0, le=24.0)
+    severity: str
+    confidence: float
+    modalities_used: List[str]
+    modality_contributions: dict
+    inference_time_s: float
+    debug: Optional[dict] = None
+    timestamp: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+    )
+

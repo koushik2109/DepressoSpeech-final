@@ -28,7 +28,7 @@ export default function DoctorQueue() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [busyId, setBusyId] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -59,7 +59,8 @@ export default function DoctorQueue() {
   }
 
   const handleAction = async (assignmentId, action) => {
-    setBusyId(`${assignmentId}:${action}`);
+    if (busy) return;
+    setBusy(true);
     setMessage("");
     setError("");
     try {
@@ -75,7 +76,7 @@ export default function DoctorQueue() {
     } catch (err) {
       setError(err.message || "Unable to update assignment.");
     } finally {
-      setBusyId("");
+      setBusy(false);
     }
   };
 
@@ -141,12 +142,14 @@ export default function DoctorQueue() {
                         Requested: {formatIST(assignment.createdAt)}
                       </p>
                     </div>
-                    <Link
-                      to={`/doctor/patient/${assignment.patient?.id || assignment.patientId || assignment.patient?.email || assignment.id}`}
-                      className="rounded-full bg-[#ECF8F3] px-3 py-1 text-xs font-semibold text-[#1F7A66]"
-                    >
-                      History
-                    </Link>
+                    {(assignment.patient?.id || assignment.patientId) && (
+                      <Link
+                        to={`/doctor/patient/${assignment.patient?.id || assignment.patientId}`}
+                        className="rounded-full bg-[#ECF8F3] px-3 py-1 text-xs font-semibold text-[#1F7A66]"
+                      >
+                        History
+                      </Link>
+                    )}
                   </div>
 
                   {assignment.assessment && (
@@ -165,7 +168,7 @@ export default function DoctorQueue() {
                     <Button
                       size="sm"
                       onClick={() => handleAction(assignment.id, "accept")}
-                      disabled={busyId === `${assignment.id}:accept`}
+                      disabled={busy}
                     >
                       Accept
                     </Button>
@@ -173,7 +176,7 @@ export default function DoctorQueue() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleAction(assignment.id, "reject")}
-                      disabled={busyId === `${assignment.id}:reject`}
+                      disabled={busy}
                     >
                       Reject
                     </Button>
@@ -181,7 +184,7 @@ export default function DoctorQueue() {
                       size="sm"
                       variant="secondary"
                       onClick={() => handleAction(assignment.id, "reassign")}
-                      disabled={busyId === `${assignment.id}:reassign`}
+                      disabled={busy}
                     >
                       Reassign
                     </Button>

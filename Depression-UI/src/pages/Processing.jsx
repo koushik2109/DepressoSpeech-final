@@ -32,6 +32,39 @@ const processingSteps = [
   },
 ];
 
+const multimodalSteps = [
+  {
+    label: "Loading Recordings",
+    description: "Preparing audio and video data",
+    threshold: 8,
+  },
+  {
+    label: "Extracting Audio Features",
+    description: "Generating eGeMAPS, MFCC, and prosodic features",
+    threshold: 20,
+  },
+  {
+    label: "Analyzing Facial Features",
+    description: "Processing video frames for action units and gaze",
+    threshold: 40,
+  },
+  {
+    label: "Transcribing Speech",
+    description: "Converting speech to text for linguistic analysis",
+    threshold: 55,
+  },
+  {
+    label: "Trimodal Fusion",
+    description: "Running cross-modal attention prediction",
+    threshold: 80,
+  },
+  {
+    label: "Completed",
+    description: "Multimodal report is ready to open",
+    threshold: 100,
+  },
+];
+
 const fastSteps = [
   {
     label: "Scoring Answers",
@@ -63,7 +96,8 @@ export default function Processing() {
   const latestAssessment = useMemo(() => readAssessment(), []);
   const hasAssessment = Boolean(latestAssessment.id);
   const hasAudio = (latestAssessment.recordingCount || 0) > 0;
-  const steps = hasAudio ? processingSteps : fastSteps;
+  const hasVideo = Boolean(latestAssessment.hasVideoRecordings);
+  const steps = hasVideo ? multimodalSteps : hasAudio ? processingSteps : fastSteps;
   const initialProgress =
     latestAssessment.status === "completed" ||
       latestAssessment.reportStatus === "available"
@@ -102,6 +136,7 @@ export default function Processing() {
   const [forcedReady, setForcedReady] = useState(false);
   const startedAtRef = useRef(0);
   const hasNavigatedRef = useRef(false);
+  const navigateTimerRef = useRef(null);
 
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
@@ -116,7 +151,7 @@ export default function Processing() {
       let changed = false;
       const next = { ...previous };
       for (const step of steps) {
-        if (nextProgress >= step.threshold && !next[step.threshold]) {
+        if (nextProgress >= step.threshold && next[step.threshold] == null) {
           next[step.threshold] = atSeconds;
           changed = true;
         }
@@ -146,7 +181,11 @@ export default function Processing() {
       markCompletedSteps(100, elapsedAt);
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
-        timerId = window.setTimeout(() => navigate("/results"), 500);
+        navigateTimerRef.current = window.setTimeout(() => {
+          navigateTimerRef.current = null;
+          navigate("/results");
+        }, 500);
+        timerId = navigateTimerRef.current;
       }
     };
 
@@ -225,16 +264,26 @@ export default function Processing() {
     return () => {
       stopped = true;
       if (timerId) window.clearTimeout(timerId);
+      if (navigateTimerRef.current) window.clearTimeout(navigateTimerRef.current);
     };
   }, [hasAudio, latestAssessment.id, markCompletedSteps, navigate]);
 
   const openReport = () => {
-    if (isCompleted) navigate("/results");
+    if (!isCompleted) return;
+    if (navigateTimerRef.current) {
+      window.clearTimeout(navigateTimerRef.current);
+      navigateTimerRef.current = null;
+      navigate("/results");
+      return;
+    }
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    navigate("/results");
   };
 
   const getStepDuration = (index) => {
     const endAt = stepReachedAt[steps[index].threshold];
-    if (!endAt) return null;
+    if (endAt == null) return null;
     const prevThreshold = index > 0 ? steps[index - 1].threshold : null;
     const startAt = prevThreshold
       ? stepReachedAt[prevThreshold] || 0

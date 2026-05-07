@@ -92,7 +92,7 @@ class Doctor(Base):
     )
 
 
-# ── Doctor Assignments ────────────────────────────────
+# ── Doctor Assignments (legacy doctor-facing queue) ───
 
 class DoctorAssignment(Base):
     __tablename__ = "doctor_assignments"
@@ -111,6 +111,38 @@ class DoctorAssignment(Base):
     __table_args__ = (
         Index("ix_doctor_assignments_patient_created", "patient_id", "created_at"),
         Index("ix_doctor_assignments_doctor_created", "doctor_id", "created_at"),
+    )
+
+
+# ── Consultations (patient-facing lifecycle) ───────────
+
+class Consultation(Base):
+    __tablename__ = "consultations"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    doctor_id = Column(String(36), ForeignKey("doctors.id"), nullable=False, index=True)
+    patient_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    assessment_id = Column(String(36), ForeignKey("assessments.id"), nullable=True, index=True)
+    doctor_assignment_id = Column(String(36), ForeignKey("doctor_assignments.id"), nullable=True, index=True)
+    status = Column(
+        String(16),
+        default="pending",
+        nullable=False,
+    )  # pending | active | stopped | completed | rejected | cancelled
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    stop_reason = Column(Text, nullable=True)
+
+    doctor = relationship("Doctor", lazy="selectin")
+    patient = relationship("User", lazy="selectin", foreign_keys=[patient_id])
+    assessment = relationship("Assessment", lazy="selectin")
+
+    __table_args__ = (
+        Index("ix_consultations_patient_status", "patient_id", "status"),
+        Index("ix_consultations_doctor_status", "doctor_id", "status"),
+        Index("ix_consultations_patient_created", "patient_id", "created_at"),
     )
 
 

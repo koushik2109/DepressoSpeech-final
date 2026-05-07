@@ -88,11 +88,21 @@ def normalize_severity_label(value: Optional[str], score: Optional[float] = None
 
 
 def confidence_score_from_interval(mean: Optional[float], std: Optional[float]) -> Optional[float]:
-    if mean is None:
+    if mean is None or std is None or std <= 0:
         return None
     spread = abs(std or 0.0)
     # PHQ-8 spans 0-24. A 12-point std is effectively low confidence.
     return max(0.0, min(1.0, 1.0 - (spread / 12.0)))
+
+
+def _safe_json_loads(value: str | None, default=None):
+    fallback = {} if default is None else default
+    if not value:
+        return fallback
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return fallback
 
 
 def distribute_total_score(total_score: int, answers: list, media_by_id: dict) -> dict[int, int]:
@@ -154,7 +164,7 @@ def ml_detail_payload(detail: AssessmentMLDetail | None, assessment: Assessment 
         "audioQualityScore": detail.audio_quality_score,
         "audioSnrDb": detail.audio_snr_db,
         "audioSpeechProb": detail.audio_speech_prob,
-        "behavioral": json.loads(detail.behavioral_json) if detail.behavioral_json else {},
+        "behavioral": _safe_json_loads(detail.behavioral_json),
         "inferenceTimeMs": detail.inference_time_ms,
     }
 
@@ -209,13 +219,14 @@ async def _sync_report_state(db: AsyncSession, assessment: Assessment) -> bool:
             assessment.report_status = "available"
             assessment.is_report_ready = True
             if job:
-                job.status = "succeeded"
+                job.status = "timeout_recovered"
                 job.progress_pct = 100
-                job.stage = "Completed (timeout recovery)"
+                job.stage = "Timeout recovery"
                 job.finished_at = now
+                job.error_message = f"Timed out after {elapsed:.0f}s, force-completed with existing scores"
             await db.flush()
             logger.warning(
-                f"[SYNC] Assessment {assessment.id[:8]}... recovered from stuck state after {elapsed:.0f}s"
+                f"[SYNC] Assessment {assessment.id[:8]}... timeout-recovered from stuck state after {elapsed:.0f}s"
             )
             return True
 
@@ -818,8 +829,10 @@ async def _run_ml_inference(assessment_id: str, user_id: str, audio_file_ids: li
                         job.error_message = str(e)
                         job.finished_at = datetime.now(timezone.utc)
                     await db.commit()
-        except Exception:
-            pass
+        except Exception as cleanup_exc:
+            logger.exception(
+                f"[ML] Failed to mark assessment {assessment_id} as failed: {cleanup_exc}"
+            )
 
 
 # ── GET /assessments/{id}/ml-details ─────────────────

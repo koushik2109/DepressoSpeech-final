@@ -186,7 +186,9 @@ def create_app() -> FastAPI:
         audio_router,
         doctor_router,
         doctors_router,
+        consultations_router,
         admin_router,
+        multimodal_router,
     )
 
     prefix = settings.API_V1_PREFIX
@@ -195,7 +197,9 @@ def create_app() -> FastAPI:
     app.include_router(audio_router, prefix=prefix)
     app.include_router(doctor_router, prefix=prefix)
     app.include_router(doctors_router, prefix=prefix)
+    app.include_router(consultations_router, prefix=prefix)
     app.include_router(admin_router, prefix=prefix)
+    app.include_router(multimodal_router, prefix=prefix)
 
     @app.get("/health")
     async def health():

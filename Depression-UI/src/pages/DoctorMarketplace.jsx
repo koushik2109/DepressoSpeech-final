@@ -8,6 +8,8 @@ import {
   getCurrentUser,
   listPatientAssignments,
   listDoctors,
+  getActiveConsultation,
+  getConsultationHistory,
 } from "../services/api.js";
 
 function readLatestAssessmentId() {
@@ -31,10 +33,27 @@ export default function DoctorMarketplace() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [assignments, setAssignments] = useState([]);
+  const [activeConsultation, setActiveConsultation] = useState(null);
+  const [checkingConsultation, setCheckingConsultation] = useState(true);
+  const [consultationHistory, setConsultationHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const assessmentId = useMemo(() => readLatestAssessmentId(), []);
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  useEffect(() => {
+    if (!userId || userRole !== "patient") return undefined;
+    setCheckingConsultation(true);
+    getActiveConsultation()
+      .then((response) => setActiveConsultation(response.consultation))
+      .catch(() => setActiveConsultation(null))
+      .finally(() => setCheckingConsultation(false));
+    return undefined;
+  }, [userId, userRole]);
 
   useEffect(() => {
     let active = true;
+    if (!userId || userRole !== "patient") return undefined;
     setLoading(true);
     setError("");
 
@@ -56,13 +75,20 @@ export default function DoctorMarketplace() {
     return () => {
       active = false;
     };
-  }, [filters]);
+  }, [filters, userId, userRole]);
 
   useEffect(() => {
+    if (!userId || userRole !== "patient") return undefined;
     listPatientAssignments()
       .then(setAssignments)
       .catch(() => setAssignments([]));
-  }, []);
+    setLoadingHistory(true);
+    getConsultationHistory()
+      .then((response) => setConsultationHistory(response.items || []))
+      .catch(() => setConsultationHistory([]))
+      .finally(() => setLoadingHistory(false));
+    return undefined;
+  }, [userId, userRole]);
 
   if (!user || user.role !== "patient") {
     return <Navigate to="/login" replace />;
@@ -83,7 +109,7 @@ export default function DoctorMarketplace() {
         autoAssign,
         assessmentId,
       });
-      setMessage(`Request sent to Dr. ${assignment.doctor.name}. Contact details are emailed after acceptance.`);
+      setMessage(`Request sent to Dr. ${assignment.doctor?.name || "Doctor"}. Contact details are emailed after acceptance.`);
       listPatientAssignments()
         .then(setAssignments)
         .catch(() => setAssignments([]));
@@ -124,6 +150,25 @@ export default function DoctorMarketplace() {
             </div>
           </div>
         </section>
+
+        {!checkingConsultation && activeConsultation && (
+          <Card className="p-5 md:p-6 border-l-4 border-l-[#2D6A4F] bg-[#F3FBF7]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-[#1B1B1B]">
+                  Active Consultation
+                </h3>
+                <p className="text-sm text-[#6A766F] mt-1">
+                  You have an active consultation with Dr. {activeConsultation.doctor?.name}. 
+                  The marketplace is unavailable while a consultation is ongoing.
+                </p>
+              </div>
+              <Link to="/consultation">
+                <Button>View Consultation</Button>
+              </Link>
+            </div>
+          </Card>
+        )}
 
         <Card className="p-5 md:p-6">
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_220px] md:items-end">
@@ -175,23 +220,41 @@ export default function DoctorMarketplace() {
           </div>
         )}
 
-        {assignments.length > 0 && (
+        {consultationHistory.length > 0 && (
           <Card className="p-5 md:p-6">
-            <h2 className="text-xl font-bold text-[#1B1B1B]">Your Doctor Requests</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {assignments.slice(0, 6).map((assignment) => (
-                <div key={assignment.id} className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] px-4 py-3">
-                  <p className="font-bold text-[#1B1B1B]">
-                    Dr. {assignment.doctor?.name || "Doctor"}
-                  </p>
-                  <p className="text-sm text-[#6A766F]">
-                    Status: <span className="font-bold capitalize">{assignment.status}</span>
-                  </p>
-                  {assignment.status === "accepted" && (
-                    <p className="mt-1 text-xs text-[#2D6A4F]">
-                      {assignment.doctor?.email} · {assignment.doctor?.phone}
-                    </p>
-                  )}
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
+              <h2 className="text-xl font-bold text-[#1B1B1B]">Consultation History</h2>
+              <Link to="/consultation-history">
+                <Button variant="outline" size="sm">View All</Button>
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {consultationHistory.slice(0, 5).map((consultation) => (
+                <div key={consultation.id} className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex-1">
+                      <p className="font-bold text-[#1B1B1B]">
+                        Dr. {consultation.doctor?.name || "Doctor"}
+                      </p>
+                      <p className="text-sm text-[#6A766F]">
+                        {consultation.assessment?.severity} (Score: {consultation.assessment?.score}/24)
+                      </p>
+                      <p className="text-xs text-[#999] mt-1">
+                        {new Date(consultation.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap ${
+                        consultation.status === "active"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : consultation.status === "stopped"
+                            ? "bg-gray-50 text-gray-700 border-gray-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}
+                    >
+                      {consultation.status}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -200,6 +263,16 @@ export default function DoctorMarketplace() {
 
         {loading ? (
           <Card className="p-8 text-center text-[#6A766F]">Loading doctors...</Card>
+        ) : activeConsultation ? (
+          <Card className="p-8 text-center">
+            <p className="text-lg font-bold text-[#1B1B1B]">Marketplace Unavailable</p>
+            <p className="mt-1 text-sm text-[#6A766F]">
+              You have an active consultation. Please complete or stop your current consultation to assign a new doctor.
+            </p>
+            <Link to="/consultation" className="mt-4 inline-block">
+              <Button>View Your Consultation</Button>
+            </Link>
+          </Card>
         ) : doctors.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-lg font-bold text-[#1B1B1B]">No matching doctors</p>

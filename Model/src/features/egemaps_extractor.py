@@ -30,6 +30,14 @@ class EgemapsExtractor:
     """
 
     EXPECTED_DIM = EGEMAPS_DIM
+    BEHAVIORAL_REPORT_FEATURES = (
+        ("f0_mean", 0),
+        ("f0_std", 1),
+        ("jitter", 2),
+        ("shimmer", 3),
+        ("loudness_mean", 4),
+        ("loudness_std", 5),
+    )
 
     def __init__(self):
         self._smile = None

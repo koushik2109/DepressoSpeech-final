@@ -1,5 +1,6 @@
 """Doctor marketplace, profile, and assignment routes."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import asc, desc, func, select
@@ -8,7 +9,7 @@ from typing import Optional
 
 from database import get_db
 from src.middleware.deps import get_current_user, require_doctor, require_patient
-from src.models import Assessment, AssessmentAnswer, AssessmentMLDetail, Doctor, DoctorAssignment, MediaFile, User
+from src.models import Assessment, AssessmentAnswer, AssessmentMLDetail, Consultation, Doctor, DoctorAssignment, MediaFile, User
 from src.routes.assessments import PHQ8_QUESTIONS, ml_detail_payload
 from src.services.email_service import send_card_email_async
 
@@ -201,7 +202,6 @@ async def update_doctor_profile(
     doctor.phone = body.phone.strip()
     doctor.fee = body.fee
     doctor.is_available = body.isAvailable
-    user.email = body.email.lower()
     await db.flush()
 
     payload = _doctor_payload(doctor)
@@ -232,6 +232,19 @@ async def assign_doctor(
     doctor = await _select_doctor(db, body.doctorId, body.autoAssign)
     assessment = await _select_assessment(db, user.id, body.assessmentId)
 
+    existing = (await db.execute(
+        select(DoctorAssignment).where(
+            DoctorAssignment.doctor_id == doctor.id,
+            DoctorAssignment.patient_id == user.id,
+            DoctorAssignment.status.in_(["pending", "accepted"]),
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="An active assignment with this doctor already exists.",
+        )
+
     assignment = DoctorAssignment(
         doctor_id=doctor.id,
         patient_id=user.id,
@@ -240,6 +253,18 @@ async def assign_doctor(
     )
     db.add(assignment)
     await db.flush()
+
+    # Create pending consultation
+    consultation = Consultation(
+        doctor_id=doctor.id,
+        patient_id=user.id,
+        assessment_id=assessment.id if assessment else None,
+        doctor_assignment_id=assignment.id,
+        status="pending",
+    )
+    db.add(consultation)
+    await db.flush()
+    await db.commit()
 
     background_tasks.add_task(
         _send_assignment_emails,
@@ -332,6 +357,32 @@ async def update_assignment_status(
         if assignment.status != "pending":
             raise HTTPException(status_code=409, detail="Assignment already handled.")
         assignment.status = "accepted"
+        
+        # Create or activate consultation when assignment is accepted
+        existing_consultation = (await db.execute(
+            select(Consultation).where(
+                Consultation.doctor_id == doctor.id,
+                Consultation.patient_id == assignment.patient_id,
+                Consultation.status.in_(["pending", "active"]),
+            )
+        )).scalar_one_or_none()
+        
+        if existing_consultation:
+            # Update existing pending consultation to active
+            existing_consultation.status = "active"
+            existing_consultation.started_at = datetime.now(timezone.utc)
+        else:
+            # Create new consultation
+            consultation = Consultation(
+                doctor_id=doctor.id,
+                patient_id=assignment.patient_id,
+                assessment_id=assignment.assessment_id,
+                doctor_assignment_id=assignment.id,
+                status="active",
+                started_at=datetime.now(timezone.utc),
+            )
+            db.add(consultation)
+        
         active_patient_count = (await db.execute(
             select(func.count(func.distinct(DoctorAssignment.patient_id))).where(
                 DoctorAssignment.doctor_id == doctor.id,
@@ -390,6 +441,7 @@ async def update_assignment_status(
         }
 
     await db.flush()
+    await db.commit()
     return {"assignment": _assignment_payload(assignment, patient, assessment)}
 
 

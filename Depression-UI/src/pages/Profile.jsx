@@ -90,22 +90,37 @@ export default function Profile() {
         if (!form.email?.trim() || !form.phone?.trim() || form.fee === "") {
           throw new Error("Email, phone, and fee are required.");
         }
+        const fee = Number(form.fee);
+        if (!Number.isFinite(fee)) {
+          throw new Error("Fee must be a valid number.");
+        }
         const updated = await updateDoctorProfile({
           email: form.email.trim().toLowerCase(),
           phone: form.phone.trim(),
-          fee: Number(form.fee),
+          fee,
           isAvailable: Boolean(form.isAvailable),
         });
         updateCurrentUser({ email: updated.email });
         setProfile(updated);
+        setForm({
+          email: updated?.email || "",
+          phone: updated?.phone || "",
+          fee: String(updated?.fee ?? 100),
+          isAvailable: Boolean(updated?.isAvailable),
+        });
         setMessage("Profile updated.");
       } else {
         if (!form.name?.trim()) {
           throw new Error("Name is required.");
         }
+        const age =
+          form.age === "" || form.age == null ? null : Number(form.age);
+        if (age != null && !Number.isFinite(age)) {
+          throw new Error("Age must be a valid number.");
+        }
         const updated = await updateUserProfile({
           name: form.name.trim(),
-          age: form.age === "" ? null : Number(form.age),
+          age,
           basicInfo: form.basicInfo?.trim() || "",
         });
         updateCurrentUser(updated);

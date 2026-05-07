@@ -21,11 +21,14 @@ const DoctorPatientDetail = lazy(() => import("./pages/DoctorPatientDetail.jsx")
 const DoctorQueue = lazy(() => import("./pages/DoctorQueue.jsx"));
 const DoctorMarketplace = lazy(() => import("./pages/DoctorMarketplace.jsx"));
 const DoctorReport = lazy(() => import("./pages/DoctorReport.jsx"));
+const Consultation = lazy(() => import("./pages/Consultation.jsx"));
+const ConsultationHistory = lazy(() => import("./pages/ConsultationHistory.jsx"));
 const Assessment = lazy(() => import("./pages/Assessment.jsx"));
 const AssessmentHistory = lazy(() => import("./pages/AssessmentHistory.jsx"));
 const AssessmentDetail = lazy(() => import("./pages/AssessmentDetail.jsx"));
 const Processing = lazy(() => import("./pages/Processing.jsx"));
 const Results = lazy(() => import("./pages/Results.jsx"));
+const MultimodalAssessment = lazy(() => import("./pages/MultimodalAssessment.jsx"));
 
 function App() {
   const location = useLocation();
@@ -160,10 +163,40 @@ function App() {
               }
             />
             <Route
+              path="/multimodal-assessment"
+              element={
+                canAccessPatientFlow ? (
+                  <MultimodalAssessment />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+            <Route
               path="/doctors"
               element={
                 canAccessPatientFlow ? (
                   <DoctorMarketplace />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+            <Route
+              path="/consultation"
+              element={
+                canAccessPatientFlow ? (
+                  <Consultation />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+            <Route
+              path="/consultation-history"
+              element={
+                canAccessPatientFlow ? (
+                  <ConsultationHistory />
                 ) : (
                   <Navigate to="/login" replace />
                 )

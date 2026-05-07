@@ -23,6 +23,23 @@ from src.inference.fusion_predictor import FusionPredictor
 
 logger = logging.getLogger(__name__)
 
+EGEMAPS_BEHAVIORAL_FEATURE_INDEXES = dict(EgemapsExtractor.BEHAVIORAL_REPORT_FEATURES)
+_MAX_EGEMAPS_BEHAVIORAL_INDEX = max(EGEMAPS_BEHAVIORAL_FEATURE_INDEXES.values(), default=-1)
+
+
+def _egemaps_behavioral_payload(egemaps_mean: np.ndarray) -> dict:
+    """Extract report-friendly eGeMAPS fields using documented feature indexes."""
+    if egemaps_mean.shape[0] <= _MAX_EGEMAPS_BEHAVIORAL_INDEX:
+        logger.warning(
+            "eGeMAPS feature vector has %s values; expected at least %s for behavioral report fields",
+            egemaps_mean.shape[0],
+            _MAX_EGEMAPS_BEHAVIORAL_INDEX + 1,
+        )
+    return {
+        name: float(egemaps_mean[index]) if egemaps_mean.shape[0] > index else 0.0
+        for name, index in EGEMAPS_BEHAVIORAL_FEATURE_INDEXES.items()
+    }
+
 
 @dataclass
 class FusionPredictionResult:
@@ -334,12 +351,7 @@ class FusionInferencePipeline:
         egemaps_dim = egemaps.shape[1] if egemaps.ndim > 1 else 88
         egemaps_mean = egemaps.mean(axis=0) if egemaps.size else np.zeros(egemaps_dim)
         behavioral = {
-            "f0_mean": float(egemaps_mean[0]) if egemaps_mean.shape[0] > 0 else 0.0,
-            "f0_std": float(egemaps_mean[1]) if egemaps_mean.shape[0] > 1 else 0.0,
-            "jitter": float(egemaps_mean[2]) if egemaps_mean.shape[0] > 2 else 0.0,
-            "shimmer": float(egemaps_mean[3]) if egemaps_mean.shape[0] > 3 else 0.0,
-            "loudness_mean": float(egemaps_mean[4]) if egemaps_mean.shape[0] > 4 else 0.0,
-            "loudness_std": float(egemaps_mean[5]) if egemaps_mean.shape[0] > 5 else 0.0,
+            **_egemaps_behavioral_payload(egemaps_mean),
             "turn_density": float(behavioral_vector[0]),
             "avg_turn_duration": float(behavioral_vector[1]),
             "avg_pause": float(behavioral_vector[3]),
@@ -364,8 +376,9 @@ class FusionInferencePipeline:
             confidence={
                 "mean": round(display_score, 2),
                 "std": 0.0,
-                "ci_lower": round(display_score, 2),
-                "ci_upper": round(display_score, 2),
+                "ci_lower": None,
+                "ci_upper": None,
+                "method": "deterministic",
             },
             audio_quality={
                 "rms": round(quality_details["rms"], 4),

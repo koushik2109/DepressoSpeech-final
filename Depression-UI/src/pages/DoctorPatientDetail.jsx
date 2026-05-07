@@ -61,6 +61,7 @@ export default function DoctorPatientDetail() {
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   const loadPatient = useCallback(async () => {
     setLoading(true);
@@ -132,9 +133,10 @@ export default function DoctorPatientDetail() {
   }
 
   const handleAction = async (action) => {
-    if (!latestAssignment?.id) return;
+    if (!latestAssignment?.id || updating) return;
     setUpdating(action);
     setMessage("");
+    setIsError(false);
     try {
       await updateDoctorAssignment(latestAssignment.id, action);
       await loadPatient();
@@ -146,6 +148,7 @@ export default function DoctorPatientDetail() {
             : "Patient reassigned.",
       );
     } catch (err) {
+      setIsError(true);
       setMessage(err.message || "Unable to update assignment.");
     } finally {
       setUpdating("");
@@ -179,8 +182,8 @@ export default function DoctorPatientDetail() {
     metrics.improvement != null
       ? metrics.improvement
       : history.length > 1
-        ? (history[history.length - 1]?.assessment?.score || 0) -
-          (history[0]?.assessment?.score || 0)
+        ? (history[0]?.assessment?.score || 0) -
+          (history[history.length - 1]?.assessment?.score || 0)
         : 0;
 
   const improvementLabel =
@@ -242,7 +245,7 @@ export default function DoctorPatientDetail() {
                     <Button
                       size="sm"
                       onClick={() => handleAction("accept")}
-                      disabled={updating === "accept"}
+                      disabled={!!updating}
                     >
                       Accept
                     </Button>
@@ -250,7 +253,7 @@ export default function DoctorPatientDetail() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleAction("reject")}
-                      disabled={updating === "reject"}
+                      disabled={!!updating}
                     >
                       Reject
                     </Button>
@@ -258,7 +261,7 @@ export default function DoctorPatientDetail() {
                       size="sm"
                       variant="secondary"
                       onClick={() => handleAction("reassign")}
-                      disabled={updating === "reassign"}
+                      disabled={!!updating}
                     >
                       Reassign
                     </Button>
@@ -267,7 +270,9 @@ export default function DoctorPatientDetail() {
               </div>
             </div>
             {message && (
-              <p className="mt-4 text-sm font-semibold text-[#2D6A4F]">
+              <p
+                className={`mt-4 text-sm font-semibold ${isError ? "text-red-600" : "text-[#2D6A4F]"}`}
+              >
                 {message}
               </p>
             )}

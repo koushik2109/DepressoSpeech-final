@@ -16,7 +16,6 @@ import {
   getDashboardSnapshot,
   listDoctorAssignments,
   logoutUser,
-  updateDoctorAssignment,
 } from "../services/api.js";
 
 const riskOrder = [
@@ -68,9 +67,6 @@ export default function DoctorDashboard() {
   const doctor = getCurrentUser();
   const [snapshot, setSnapshot] = useState({ assessments: [], users: [] });
   const [assignments, setAssignments] = useState([]);
-  const [assignmentMessage, setAssignmentMessage] = useState("");
-  const [assignmentError, setAssignmentError] = useState("");
-  const [updatingAssignmentId, setUpdatingAssignmentId] = useState("");
 
   const refreshDashboard = useCallback(async () => {
     try {
@@ -90,8 +86,15 @@ export default function DoctorDashboard() {
   }, []);
 
   useEffect(() => {
-    refreshDashboard();
-    refreshAssignments();
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      refreshDashboard();
+      refreshAssignments();
+    });
+    return () => {
+      active = false;
+    };
   }, [refreshAssignments, refreshDashboard]);
 
   useEffect(() => {
@@ -135,6 +138,9 @@ export default function DoctorDashboard() {
   const pendingCount = safeAssignments.filter(
     (item) => item.status === "pending",
   ).length;
+  const pendingAssignments = safeAssignments.filter(
+    (item) => item.status === "pending",
+  );
   const activeCaseCount = safeAssignments.filter((item) =>
     ["accepted", "completed"].includes(item.status),
   ).length;
@@ -243,38 +249,21 @@ export default function DoctorDashboard() {
       !selectedPatientKey ||
       !patientCards.some((item) => item.key === selectedPatientKey)
     ) {
-      setSelectedPatientKey(patientCards[0].key);
+      let active = true;
+      const nextKey = patientCards[0].key;
+      Promise.resolve().then(() => {
+        if (active) setSelectedPatientKey(nextKey);
+      });
+      return () => {
+        active = false;
+      };
     }
+    return undefined;
   }, [patientCards, selectedPatientKey]);
 
   if (!doctor || doctor.role !== "doctor") {
     return <Navigate to="/signin" replace />;
   }
-
-  const handleAssignmentAction = async (assignmentId, action) => {
-    setUpdatingAssignmentId(`${assignmentId}:${action}`);
-    setAssignmentError("");
-    setAssignmentMessage("");
-    try {
-      const result = await updateDoctorAssignment(assignmentId, action);
-      await Promise.all([refreshDashboard(), refreshAssignments()]);
-      setAssignmentMessage(
-        action === "reassign" && result.reassigned
-          ? "Patient reassigned to the next available doctor."
-          : action === "reassign"
-            ? "No alternate available doctor was found."
-            : action === "accept"
-              ? "Case accepted."
-              : action === "complete"
-                ? "Case completed."
-                : "Case rejected.",
-      );
-    } catch (err) {
-      setAssignmentError(err.message || "Unable to update assignment.");
-    } finally {
-      setUpdatingAssignmentId("");
-    }
-  };
 
   return (
     <div className="pt-24 lg:pt-28 min-h-screen px-4 py-10 bg-[#F7F7F2]">
@@ -395,23 +384,15 @@ export default function DoctorDashboard() {
                 Review only pending assignments from the queue page.
               </p>
             </div>
-            {(assignmentMessage || assignmentError) && (
-              <p
-                className={`text-sm font-semibold ${assignmentError ? "text-red-600" : "text-emerald-700"}`}
-              >
-                {assignmentError || assignmentMessage}
-              </p>
-            )}
           </div>
 
           <div className="mt-5 space-y-3">
-            {assignments.length === 0 ? (
+            {pendingAssignments.length === 0 ? (
               <p className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] px-4 py-5 text-sm text-[#6A766F]">
                 No pending patients right now.
               </p>
             ) : (
-              assignments
-                .filter((assignment) => assignment.status === "pending")
+              pendingAssignments
                 .slice(0, 3)
                 .map((assignment) => (
                 <div

@@ -388,6 +388,111 @@ export default function Results() {
           />
         </div>
 
+        {/* ─── Multimodal Results (when video was recorded) ─── */}
+        {assessment?.hasMultimodal && assessment?.multimodalResult && (
+          <div className="results-section-card mb-10">
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="results-section-heading">Multimodal Analysis</h2>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#EDE9FE] to-[#D8F3DC] text-xs font-bold text-[#7C3AED]">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  Trimodal Fusion
+                </span>
+              </div>
+              <p className="text-sm text-[#777]">
+                Your assessment included video recording, enabling analysis across voice, facial expressions, and speech content.
+              </p>
+            </div>
+
+            {/* Modality badges */}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {(assessment.multimodalResult.modalities_used || []).map((mod) => (
+                <span
+                  key={mod}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold"
+                  style={{
+                    backgroundColor: mod === "audio" ? "#D8F3DC" : mod === "video" ? "#EDE9FE" : "#FEF3C7",
+                    color: mod === "audio" ? "#2D6A4F" : mod === "video" ? "#7C3AED" : "#D97706",
+                  }}
+                >
+                  {mod === "audio" ? "🎙️" : mod === "video" ? "🎬" : "📝"} {mod.charAt(0).toUpperCase() + mod.slice(1)}
+                </span>
+              ))}
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="rounded-xl bg-[#F7F7F2] p-4 text-center">
+                <p className="text-xs text-[#777] uppercase tracking-wider mb-1">Multimodal Score</p>
+                <p className="text-2xl font-bold text-[#1B1B1B]">
+                  {assessment.multimodalResult.phq8_score ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-xl bg-[#F7F7F2] p-4 text-center">
+                <p className="text-xs text-[#777] uppercase tracking-wider mb-1">Confidence</p>
+                <p className="text-2xl font-bold text-[#1B1B1B]">
+                  {Math.round((assessment.multimodalResult.confidence || 0) * 100)}%
+                </p>
+              </div>
+              <div className="rounded-xl bg-[#F7F7F2] p-4 text-center">
+                <p className="text-xs text-[#777] uppercase tracking-wider mb-1">Processing</p>
+                <p className="text-2xl font-bold text-[#1B1B1B]">
+                  {(assessment.multimodalResult.processing_time_s || 0).toFixed(1)}s
+                </p>
+              </div>
+            </div>
+
+            {/* Modality contribution bars */}
+            {assessment.multimodalResult.modality_contributions && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-[#777] uppercase tracking-wider">
+                  Modality Contributions
+                </p>
+                {Object.entries(assessment.multimodalResult.modality_contributions).map(
+                  ([mod, value]) => {
+                    const colors = {
+                      audio: { bar: "#2D6A4F", bg: "#D8F3DC", label: "Audio (Voice)" },
+                      video: { bar: "#7C3AED", bg: "#EDE9FE", label: "Video (Face)" },
+                      text: { bar: "#D97706", bg: "#FEF3C7", label: "Text (Speech)" },
+                    };
+                    const c = colors[mod] || colors.audio;
+                    const pct = Math.round((value || 0) * 100);
+                    return (
+                      <div key={mod} className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-[#555] w-28">{c.label}</span>
+                        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ backgroundColor: c.bg }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${pct}%`, backgroundColor: c.bar }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-[#1B1B1B] w-10 text-right">{pct}%</span>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Multimodal error notice */}
+        {assessment?.hasVideoRecordings && !assessment?.hasMultimodal && assessment?.multimodalError && (
+          <div className="rounded-xl border border-[#FEE2B3] bg-[#FFFBEB] px-5 py-4 mb-10">
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-4 h-4 text-[#92400E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <p className="text-sm font-semibold text-[#92400E]">Multimodal analysis unavailable</p>
+            </div>
+            <p className="text-xs text-[#B45309]">
+              Video was recorded but multimodal processing failed: {assessment.multimodalError}. Audio-only results are shown above.
+            </p>
+          </div>
+        )}
+
         {/* ─── Charts + Interpretation Grid ─── */}
         <div className="grid lg:grid-cols-3 gap-8 mb-10">
           <div className="lg:col-span-2 space-y-8">
@@ -558,7 +663,6 @@ export default function Results() {
                           name: "ML Voice",
                           value:
                             mlDetails.phq8Score ??
-                            mlDetails.confidenceMean ??
                             assessment?.mlScore ??
                             0,
                           fill: "#2D6A4F",

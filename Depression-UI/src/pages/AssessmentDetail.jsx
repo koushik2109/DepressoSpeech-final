@@ -15,6 +15,7 @@ import {
   getAssessmentDetail,
   getAudioBlobUrl,
   getCurrentUser,
+  revokeBlobUrl,
 } from "../services/api.js";
 
 const severityTone = {
@@ -58,9 +59,9 @@ function AudioPlayback({ fileId }) {
     let objectUrl = "";
 
     getAudioBlobUrl(fileId)
-      .then((nextUrl) => {
+      .then(({ url: nextUrl }) => {
         if (revoked) {
-          URL.revokeObjectURL(nextUrl);
+          revokeBlobUrl(nextUrl);
           return;
         }
         objectUrl = nextUrl;
@@ -70,7 +71,7 @@ function AudioPlayback({ fileId }) {
 
     return () => {
       revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      revokeBlobUrl(objectUrl);
     };
   }, [fileId]);
 
@@ -303,7 +304,7 @@ export default function AssessmentDetail() {
             Recorded Question Responses
           </h2>
           <div className="mt-6 space-y-4">
-            {assessment.answers.map((answer) => (
+            {(assessment.answers || []).map((answer) => (
               <article
                 key={answer.questionId}
                 className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] p-5"

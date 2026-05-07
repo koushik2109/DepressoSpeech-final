@@ -16,6 +16,7 @@ import {
   getAudioBlobUrl,
   getCurrentUser,
   getDoctorReport,
+  revokeBlobUrl,
   updateDoctorReportRemarks,
   updateDoctorAssignment,
 } from "../services/api.js";
@@ -30,9 +31,9 @@ function AudioPlayback({ fileId }) {
     let objectUrl = "";
 
     getAudioBlobUrl(fileId)
-      .then((nextUrl) => {
+      .then(({ url: nextUrl }) => {
         if (revoked) {
-          URL.revokeObjectURL(nextUrl);
+          revokeBlobUrl(nextUrl);
           return;
         }
         objectUrl = nextUrl;
@@ -42,7 +43,7 @@ function AudioPlayback({ fileId }) {
 
     return () => {
       revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      revokeBlobUrl(objectUrl);
     };
   }, [fileId]);
 
@@ -206,7 +207,7 @@ export default function DoctorReport() {
                   <Button
                     size="sm"
                     onClick={() => handleAction("accept")}
-                    disabled={updating === "accept"}
+                    disabled={!!updating}
                   >
                     Accept
                   </Button>
@@ -214,7 +215,7 @@ export default function DoctorReport() {
                     size="sm"
                     variant="outline"
                     onClick={() => handleAction("reject")}
-                    disabled={updating === "reject"}
+                    disabled={!!updating}
                   >
                     Reject
                   </Button>
@@ -226,7 +227,7 @@ export default function DoctorReport() {
                     size="sm"
                     variant="secondary"
                     onClick={() => handleAction("reassign")}
-                    disabled={updating === "reassign"}
+                    disabled={!!updating}
                   >
                     Reassign
                   </Button>
@@ -236,7 +237,7 @@ export default function DoctorReport() {
                   size="sm"
                   variant="outline"
                   onClick={() => handleAction("complete")}
-                  disabled={updating === "complete"}
+                  disabled={!!updating}
                 >
                   Complete
                 </Button>
@@ -329,7 +330,7 @@ export default function DoctorReport() {
             Recorded Responses
           </h2>
           <div className="mt-6 space-y-4">
-            {assessment.answers.map((answer) => (
+            {(assessment.answers || []).map((answer) => (
               <article
                 key={answer.questionId}
                 className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] p-5"

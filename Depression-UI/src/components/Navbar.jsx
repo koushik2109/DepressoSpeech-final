@@ -25,6 +25,7 @@ export default function Navbar() {
     : isPatient
       ? [
           { to: "/", label: "Home" },
+          { to: "/consultation", label: "Consultation" },
           { to: "/assessment", label: "Assessment" },
           { to: "/doctors", label: "Doctors" },
           { to: "/assessment-history", label: "History" },

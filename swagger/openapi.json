@@ -51,6 +51,10 @@
     {
       "name": "ML Health",
       "description": "ML model service health and status checks"
+    },
+    {
+      "name": "Multimodal",
+      "description": "Multimodal depression assessment — upload audio, video, and text features for trimodal fusion prediction"
     }
   ],
   "paths": {
@@ -704,6 +708,291 @@
         }
       }
     },
+    "/multimodal/process/multimodal": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Run multimodal prediction",
+        "description": "Submit audio, video, and/or text features for trimodal fusion depression prediction. At least one modality is required. Supports inline JSON features or references to previously uploaded session features.",
+        "operationId": "processMultimodal",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MultimodalRequest" },
+              "examples": {
+                "trimodal": {
+                  "summary": "All three modalities",
+                  "value": {
+                    "audio_features": { "mfcc": [[0.1, 0.2]], "egemaps": [[0.3, 0.4]] },
+                    "video_features": { "openface": [[0.5, 0.6]], "cnn_embed": [[0.7, 0.8]] },
+                    "text_features": { "raw_text": "I feel tired most days" }
+                  }
+                },
+                "audioOnly": {
+                  "summary": "Audio-only fallback",
+                  "value": {
+                    "audio_features": { "mfcc": [[0.1, 0.2]], "egemaps": [[0.3, 0.4]], "behavioral": [0.0, 0.1] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prediction result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MultimodalResponse" }
+              }
+            }
+          },
+          "400": { "description": "No modalities provided" },
+          "500": { "description": "Inference failed" }
+        }
+      }
+    },
+    "/multimodal/upload/audio": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Upload audio features",
+        "description": "Upload MFCC, eGeMAPS, and behavioral feature CSV files for a multimodal session.",
+        "operationId": "uploadMultimodalAudio",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["session_id"],
+                "oneOf": [
+                  { "required": ["mfcc_file"] },
+                  { "required": ["egemaps_file"] },
+                  { "required": ["behavioral_file"] }
+                ],
+                "properties": {
+                  "session_id": { "type": "string", "description": "Existing session ID" },
+                  "mfcc_file": { "type": "string", "format": "binary", "description": "MFCC features CSV (N×120)" },
+                  "egemaps_file": { "type": "string", "format": "binary", "description": "eGeMAPS features CSV (N×88)" },
+                  "behavioral_file": { "type": "string", "format": "binary", "description": "Behavioral features CSV (1×16)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Audio features uploaded" },
+          "400": { "description": "No audio files provided" }
+        }
+      }
+    },
+    "/multimodal/upload/video": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Upload video features",
+        "description": "Upload OpenFace and CNN embedding CSV files for a multimodal session.",
+        "operationId": "uploadMultimodalVideo",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "session_id": { "type": "string" },
+                  "openface_file": { "type": "string", "format": "binary", "description": "OpenFace features CSV (T×49)" },
+                  "cnn_file": { "type": "string", "format": "binary", "description": "CNN embeddings CSV (T×512)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Video features uploaded" },
+          "400": { "description": "No video files provided" }
+        }
+      }
+    },
+    "/multimodal/results/{sessionId}": {
+      "get": {
+        "tags": ["Multimodal"],
+        "summary": "Get multimodal results",
+        "description": "Retrieve prediction results for a multimodal session, including modality contributions.",
+        "operationId": "getMultimodalResults",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Multimodal prediction results",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MultimodalResponse" }
+              }
+            }
+          },
+          "404": { "description": "Session not found" }
+        }
+      }
+    },
+    "/multimodal/process/video": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Process a live-recorded video",
+        "description": "Upload a webcam recording (webm/mp4). The backend extracts audio via FFmpeg, extracts video frames, generates audio features (eGeMAPS, MFCC), video features (OpenFace, CNN embeddings), and optionally transcribes speech. Runs the trimodal fusion model and returns predictions with modality contributions. No raw video is stored permanently.",
+        "operationId": "processVideoRecording",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Recorded video file (webm, mp4, avi, mov, mkv). Max 500 MB."
+                  },
+                  "enable_stt": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable speech-to-text transcription for text modality"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Video processed and prediction generated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VideoProcessingResponse" }
+              }
+            }
+          },
+          "413": { "description": "Video file too large" },
+          "422": { "description": "Unsupported format or processing error" },
+          "500": { "description": "Server processing failed" }
+        }
+      }
+    },
+    "/multimodal/process/batch": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Batch process DAIC-WOZ participants",
+        "description": "Process multiple participants from the DAIC-WOZ dataset. Loads pre-extracted features (eGeMAPS, MFCC, Transcript) from the raw data directory for each participant and runs multimodal prediction. Each participant folder should contain: {id}_OpenSMILE2.3.0_egemaps.csv, {id}_OpenSMILE2.3.0_mfcc.csv, {id}_Transcript.csv.",
+        "operationId": "processBatch",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BatchProcessRequest" },
+              "examples": {
+                "threeParticipants": {
+                  "summary": "Process 3 participants",
+                  "value": {
+                    "participant_ids": ["300", "301", "302"],
+                    "include_transcript": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch processing results",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchProcessResponse" }
+              }
+            }
+          },
+          "404": { "description": "Data root directory not found" },
+          "422": { "description": "Validation error" }
+        }
+      }
+    },
+    "/multimodal/process/features": {
+      "post": {
+        "tags": ["Multimodal"],
+        "summary": "Process pre-extracted features",
+        "description": "Accept pre-extracted features (eGeMAPS, MFCC arrays, transcript text) as JSON and run the prediction pipeline. Useful for processing features extracted outside the system.",
+        "operationId": "processFeatures",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FeatureProcessRequest" },
+              "examples": {
+                "audioWithTranscript": {
+                  "summary": "Audio features + transcript",
+                  "value": {
+                    "participant_id": "300",
+                    "egemaps_data": [[0.1, 0.2, 0.3]],
+                    "mfcc_data": [[0.5, 0.6, 0.7]],
+                    "transcript_text": "I feel tired most days"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feature processing result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeatureProcessResponse" }
+              }
+            }
+          },
+          "400": { "description": "No features provided" },
+          "500": { "description": "Processing failed" }
+        }
+      }
+    },
+    "/multimodal/batch/history": {
+      "get": {
+        "tags": ["Multimodal"],
+        "summary": "Get batch processing history",
+        "description": "Retrieve the batch processing history for the current user, including single and batch sessions.",
+        "operationId": "getBatchHistory",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Batch history list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/BatchHistoryItem" }
+                    },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health (ML)": {
       "get": {
         "tags": ["ML Health"],
@@ -1100,6 +1389,223 @@
           "model_loaded": { "type": "boolean" },
           "device": { "type": "string", "example": "cpu" },
           "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MultimodalRequest": {
+        "type": "object",
+        "description": "Multimodal prediction request. At least one modality block is required.",
+        "properties": {
+          "session_id": { "type": "string", "description": "Existing session ID to add features to" },
+          "audio_features": {
+            "type": "object",
+            "properties": {
+              "mfcc": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "MFCC features (N×120)" },
+              "egemaps": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "eGeMAPS features (N×88)" },
+              "behavioral": { "type": "array", "items": { "type": "number" }, "description": "Behavioral features (16 values)" }
+            }
+          },
+          "video_features": {
+            "type": "object",
+            "properties": {
+              "openface": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "OpenFace features (T×49): pose + gaze + AUs" },
+              "cnn_embed": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "CNN visual embeddings (T×512)" }
+            }
+          },
+          "text_features": {
+            "type": "object",
+            "properties": {
+              "raw_text": { "type": "string", "description": "Raw transcript text" },
+              "embeddings": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "SBERT embeddings (N×384)" }
+            }
+          },
+          "metadata": { "type": "object", "description": "Optional metadata" }
+        }
+      },
+      "MultimodalResponse": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "phq8_score": { "type": "number", "minimum": 0, "maximum": 24 },
+          "severity": { "type": "string", "enum": ["Minimal", "Mild", "Moderate", "Moderately Severe", "Severe"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "Prediction confidence (0-1). More modalities = higher confidence." },
+          "modalities_used": { "type": "array", "items": { "type": "string", "enum": ["audio", "video", "text"] } },
+          "modality_contributions": {
+            "type": "object",
+            "description": "Per-modality contribution to the prediction (sums to 1.0)",
+            "properties": {
+              "audio": { "type": "number" },
+              "video": { "type": "number" },
+              "text": { "type": "number" }
+            }
+          },
+          "inference_time_ms": { "type": "number" },
+          "status": { "type": "string", "enum": ["completed", "processing", "failed"] }
+        }
+      },
+      "MultimodalSessionStatus": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "status": { "type": "string" },
+          "progress": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "stage": { "type": "string" },
+          "has_audio": { "type": "boolean" },
+          "has_video": { "type": "boolean" },
+          "has_text": { "type": "boolean" },
+          "result": { "$ref": "#/components/schemas/MultimodalResponse" },
+          "error": { "type": "string" }
+        }
+      },
+      "VideoProcessingResponse": {
+        "type": "object",
+        "description": "Response from processing a live-recorded video. Extends MultimodalResponse with video processing metadata.",
+        "properties": {
+          "session_id": { "type": "string" },
+          "phq8_score": { "type": "number", "minimum": 0, "maximum": 24 },
+          "severity": { "type": "string", "enum": ["Minimal", "Mild", "Moderate", "Moderately Severe", "Severe"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "modalities_used": { "type": "array", "items": { "type": "string", "enum": ["audio", "video", "text"] } },
+          "modality_contributions": {
+            "type": "object",
+            "properties": {
+              "audio": { "type": "number" },
+              "video": { "type": "number" },
+              "text": { "type": "number" }
+            }
+          },
+          "inference_time_ms": { "type": "number" },
+          "processing_time_s": { "type": "number", "description": "Total video processing time in seconds (FFmpeg + feature extraction)" },
+          "duration_sec": { "type": "number", "description": "Duration of the input video in seconds" },
+          "job_id": { "type": "string", "description": "Processing job ID for status tracking" },
+          "status": { "type": "string", "enum": ["completed", "processing", "failed"] }
+        }
+      },
+      "BatchProcessRequest": {
+        "type": "object",
+        "required": ["participant_ids"],
+        "properties": {
+          "participant_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "List of participant IDs to process"
+          },
+          "data_root": { "type": "string", "description": "Optional root path to raw data directory" },
+          "include_transcript": { "type": "boolean", "default": true, "description": "Include transcript features" }
+        }
+      },
+      "BatchProcessResponse": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "total": { "type": "integer", "description": "Total participants requested" },
+          "completed": { "type": "integer", "description": "Successfully processed count" },
+          "failed": { "type": "integer", "description": "Failed processing count" },
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BatchResultItem" }
+          },
+          "processing_time_s": { "type": "number", "description": "Total batch processing time" }
+        }
+      },
+      "BatchResultItem": {
+        "type": "object",
+        "properties": {
+          "participant_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["completed", "failed"] },
+          "phq8_score": { "type": "number", "nullable": true },
+          "severity": { "type": "string", "nullable": true },
+          "confidence": { "type": "number", "nullable": true },
+          "modalities_used": {
+            "type": "array",
+            "items": { "type": "string" },
+            "nullable": true
+          },
+          "modality_contributions": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "audio": { "type": "number" },
+              "video": { "type": "number" },
+              "text": { "type": "number" }
+            }
+          },
+          "error": { "type": "string", "nullable": true }
+        }
+      },
+      "FeatureProcessRequest": {
+        "type": "object",
+        "required": ["participant_id"],
+        "properties": {
+          "participant_id": { "type": "string", "description": "Participant identifier" },
+          "egemaps_data": {
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "number" } },
+            "description": "eGeMAPS features (N×22)"
+          },
+          "mfcc_data": {
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "number" } },
+            "description": "MFCC features (N×39)"
+          },
+          "transcript_text": { "type": "string", "description": "Raw transcript text" },
+          "metadata": { "type": "object", "description": "Optional metadata" }
+        }
+      },
+      "FeatureProcessResponse": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "participant_id": { "type": "string" },
+          "phq8_score": { "type": "number" },
+          "severity": { "type": "string" },
+          "confidence": { "type": "number" },
+          "modalities_used": { "type": "array", "items": { "type": "string" } },
+          "modality_contributions": {
+            "type": "object",
+            "properties": {
+              "audio": { "type": "number" },
+              "video": { "type": "number" },
+              "text": { "type": "number" }
+            }
+          },
+          "inference_time_ms": { "type": "number" },
+          "status": { "type": "string" }
+        }
+      },
+      "BatchHistoryItem": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string" },
+          "status": { "type": "string" },
+          "phq8_score": { "type": "number", "nullable": true },
+          "severity": { "type": "string", "nullable": true },
+          "confidence": { "type": "number", "nullable": true },
+          "modalities_used": { "type": "array", "items": { "type": "string" } },
+          "modality_contributions": {
+            "type": "object",
+            "properties": {
+              "audio": { "type": "number" },
+              "video": { "type": "number" },
+              "text": { "type": "number" }
+            }
+          },
+          "has_audio": { "type": "boolean" },
+          "has_video": { "type": "boolean" },
+          "has_text": { "type": "boolean" },
+          "is_batch": { "type": "boolean" },
+          "batch_info": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "total": { "type": "integer" },
+              "completed": { "type": "integer" },
+              "failed": { "type": "integer" }
+            }
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "error": { "type": "string", "nullable": true }
         }
       }
     }

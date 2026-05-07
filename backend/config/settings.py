@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # Database – SQLite for simplicity
-    DATABASE_URL: str = "sqlite+aiosqlite:///./mindscope.db"
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{(Path(__file__).resolve().parent.parent / 'mindscope.db').as_posix()}"
     DATABASE_ECHO: bool = False
 
     # JWT
@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     STORAGE_LOCAL_PATH: str = "./storage/audio"
     AUDIO_MAX_FILE_SIZE_MB: int = 100
     AUDIO_ALLOWED_EXTENSIONS: str = ".wav,.mp3,.flac,.ogg,.m4a,.webm"
+    VIDEO_ALLOWED_EXTENSIONS: str = ".mp4,.avi,.mov,.mkv,.webm"
+    VIDEO_MAX_FILE_SIZE_MB: int = 500
+    MULTIMODAL_STORAGE_PATH: str = "./storage/multimodal"
 
     # ML
     ML_MODEL_PATH: str = "../Model/checkpoints/best_model.pt"
