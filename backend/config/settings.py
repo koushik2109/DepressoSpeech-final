@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     ]
 
     # Storage
+    STORAGE_PROVIDER: str = "local"          # "local" | "s3"
     STORAGE_LOCAL_PATH: str = "./storage/audio"
     AUDIO_MAX_FILE_SIZE_MB: int = 100
     AUDIO_ALLOWED_EXTENSIONS: str = ".wav,.mp3,.flac,.ogg,.m4a,.webm"
@@ -46,11 +47,27 @@ class Settings(BaseSettings):
     VIDEO_MAX_FILE_SIZE_MB: int = 500
     MULTIMODAL_STORAGE_PATH: str = "./storage/multimodal"
 
+    # S3 / object storage (used when STORAGE_PROVIDER=s3)
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+    S3_BUCKET_NAME: str = ""
+    S3_KEY_PREFIX: str = "audio/"
+    S3_ENDPOINT_URL: str = ""          # override for Minio / R2 / Backblaze
+    S3_URL_EXPIRY_SECONDS: int = 3600
+
     # ML
-    ML_MODEL_PATH: str = "../Model/checkpoints/best_model.pt"
-    ML_CONFIG_PATH: str = "../Model/configs/inference_config.yaml"
+    ML_MODEL_PATH: str = "../ModelV2/checkpoints/best_model.pt"
+    ML_CONFIG_PATH: str = "../ModelV2/configs/inference_config.yaml"
     ML_DEVICE: str = "auto"
     ML_MODEL_URL: str = "http://localhost:8001"
+
+    # Inference result cache
+    ML_CACHE_TTL_SECONDS: int = 3600    # how long to keep cached predictions
+    ML_CACHE_MAX_ENTRIES: int = 500     # max in-memory entries before LRU evict
+
+    # Redis (optional – falls back to in-memory if not set)
+    REDIS_URL: str = ""                 # e.g. redis://localhost:6379/0
 
     # Admin defaults
     ADMIN_DEFAULT_EMAIL: str = "admin@mindscope.ai"

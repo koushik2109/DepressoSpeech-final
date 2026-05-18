@@ -7,7 +7,7 @@ import {
   invalidateCache,
 } from "../services/api.js";
 
-const MAX_REVEAL_SECONDS = 60;
+const MAX_REVEAL_SECONDS = 120;
 
 const processingSteps = [
   {
@@ -97,10 +97,19 @@ export default function Processing() {
   const hasAssessment = Boolean(latestAssessment.id);
   const hasAudio = (latestAssessment.recordingCount || 0) > 0;
   const hasVideo = Boolean(latestAssessment.hasVideoRecordings);
-  const steps = hasVideo ? multimodalSteps : hasAudio ? processingSteps : fastSteps;
-  const initialProgress =
-    latestAssessment.status === "completed" ||
-      latestAssessment.reportStatus === "available"
+  const hasMultimodalReady = Boolean(
+    latestAssessment.hasMultimodal && latestAssessment.multimodalResult,
+  );
+  const steps = hasVideo
+    ? multimodalSteps
+    : hasAudio
+      ? processingSteps
+      : fastSteps;
+  const initialProgress = hasMultimodalReady
+    ? 0  // animate 0→100 in useEffect
+    : latestAssessment.status === "completed" ||
+        latestAssessment.reportStatus === "available" ||
+        latestAssessment.isReportReady
       ? 100
       : hasAudio
         ? 5
@@ -109,16 +118,24 @@ export default function Processing() {
   const [status, setStatus] = useState(
     !hasAssessment
       ? "failed"
-      : latestAssessment.status === "completed" ||
-          latestAssessment.reportStatus === "available" ||
-          latestAssessment.isReportReady
-        ? "completed"
-        : hasAudio
-          ? "processing"
+      : hasMultimodalReady
+        ? "processing"  // will transition to completed after animation
+        : latestAssessment.status === "completed" ||
+            latestAssessment.reportStatus === "available" ||
+            latestAssessment.isReportReady
+          ? "completed"
           : "processing",
   );
   const [stage, setStage] = useState(
-    hasAudio ? "Loading voice responses" : "Preparing results",
+    hasMultimodalReady
+      ? (steps[0]?.label ?? "Preparing results")
+      : latestAssessment.status === "completed" ||
+          latestAssessment.reportStatus === "available" ||
+          latestAssessment.isReportReady
+        ? "Completed"
+        : hasAudio
+          ? "Loading voice responses"
+          : "Preparing results",
   );
   const [error, setError] = useState(
     hasAssessment ? "" : "Assessment not found. Please retake the assessment.",
@@ -146,19 +163,22 @@ export default function Processing() {
   const displayStep =
     activeStep === -1 ? steps.length - 1 : Math.max(0, activeStep);
 
-  const markCompletedSteps = useCallback((nextProgress, atSeconds = 0) => {
-    setStepReachedAt((previous) => {
-      let changed = false;
-      const next = { ...previous };
-      for (const step of steps) {
-        if (nextProgress >= step.threshold && next[step.threshold] == null) {
-          next[step.threshold] = atSeconds;
-          changed = true;
+  const markCompletedSteps = useCallback(
+    (nextProgress, atSeconds = 0) => {
+      setStepReachedAt((previous) => {
+        let changed = false;
+        const next = { ...previous };
+        for (const step of steps) {
+          if (nextProgress >= step.threshold && next[step.threshold] == null) {
+            next[step.threshold] = atSeconds;
+            changed = true;
+          }
         }
-      }
-      return changed ? next : previous;
-    });
-  }, [steps]);
+        return changed ? next : previous;
+      });
+    },
+    [steps],
+  );
 
   useEffect(() => {
     if (!latestAssessment.id) return undefined;
@@ -167,7 +187,10 @@ export default function Processing() {
     let stopped = false;
     let timerId = null;
 
-    const finishWithReport = async ({ forceOpen = false, elapsedAt = 0 } = {}) => {
+    const finishWithReport = async ({
+      forceOpen = false,
+      elapsedAt = 0,
+    } = {}) => {
       const detail = await getAssessmentDetail(latestAssessment.id);
       if (stopped) return;
       sessionStorage.setItem("latestAssessment", JSON.stringify(detail));
@@ -189,6 +212,45 @@ export default function Processing() {
       }
     };
 
+    if (hasMultimodalReady) {
+      // Animate stages to 100% before navigating so user sees the processing page.
+      let p = 0;
+      const stepTargets = steps.map((s) => s.threshold);
+      let stepIdx = 0;
+      const animate = () => {
+        if (stopped) return;
+        p = Math.min(p + 3, 100);
+        setProgress(p);
+        setElapsedSeconds((s) => s + 0.1);
+        const target = stepTargets[stepIdx] ?? 100;
+        if (p >= target) {
+          setStage(steps[stepIdx]?.label ?? "Completed");
+          markCompletedSteps(p, Math.round(p / 3));
+          stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+        }
+        if (p < 100) {
+          timerId = window.setTimeout(animate, 60);
+        } else {
+          setStatus("completed");
+          setStage("Completed");
+          if (!hasNavigatedRef.current) {
+            hasNavigatedRef.current = true;
+            navigateTimerRef.current = window.setTimeout(() => {
+              navigateTimerRef.current = null;
+              navigate("/results");
+            }, 800);
+            timerId = navigateTimerRef.current;
+          }
+        }
+      };
+      timerId = window.setTimeout(animate, 60);
+      return () => {
+        stopped = true;
+        if (timerId) window.clearTimeout(timerId);
+        if (navigateTimerRef.current) window.clearTimeout(navigateTimerRef.current);
+      };
+    }
+
     const pollStatus = async () => {
       const nowMs = Date.now();
       const elapsed = Math.floor((nowMs - startedAtRef.current) / 1000);
@@ -206,15 +268,7 @@ export default function Processing() {
       }
 
       try {
-        const data = hasAudio
-          ? await getProcessingStatus(latestAssessment.id)
-          : {
-              status: "completed",
-              progress: 100,
-              stage: "Completed",
-              reportReady: true,
-            };
-
+        const data = await getProcessingStatus(latestAssessment.id);
         if (stopped) return;
 
         const nextProgress = Math.min(Number(data.progress ?? 0), 100);
@@ -264,9 +318,10 @@ export default function Processing() {
     return () => {
       stopped = true;
       if (timerId) window.clearTimeout(timerId);
-      if (navigateTimerRef.current) window.clearTimeout(navigateTimerRef.current);
+      if (navigateTimerRef.current)
+        window.clearTimeout(navigateTimerRef.current);
     };
-  }, [hasAudio, latestAssessment.id, markCompletedSteps, navigate]);
+  }, [latestAssessment.id, markCompletedSteps, navigate]);
 
   const openReport = () => {
     if (!isCompleted) return;
@@ -285,17 +340,13 @@ export default function Processing() {
     const endAt = stepReachedAt[steps[index].threshold];
     if (endAt == null) return null;
     const prevThreshold = index > 0 ? steps[index - 1].threshold : null;
-    const startAt = prevThreshold
-      ? stepReachedAt[prevThreshold] || 0
-      : 0;
+    const startAt = prevThreshold ? stepReachedAt[prevThreshold] || 0 : 0;
     return Math.max(0, endAt - startAt);
   };
 
   const getActiveStepElapsed = (index) => {
     const prevThreshold = index > 0 ? steps[index - 1].threshold : null;
-    const startAt = prevThreshold
-      ? stepReachedAt[prevThreshold] || 0
-      : 0;
+    const startAt = prevThreshold ? stepReachedAt[prevThreshold] || 0 : 0;
     return Math.max(0, elapsedSeconds - startAt);
   };
 
@@ -362,6 +413,26 @@ export default function Processing() {
           >
             {error || (isCompleted ? "Your score report is ready" : stage)}
           </p>
+          {/* Modality indicator */}
+          {!isCompleted && !isFailed && (
+            <div className={`mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold ${hasVideo ? "border-[#93C5FD] bg-[#EFF6FF] text-[#1D4ED8]" : "border-[#B7E4C7] bg-[#F0FAF4] text-[#2D6A4F]"}`}>
+              {hasVideo ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  Trimodal analysis — Video + Audio + Speech
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6.75 6.75 0 006.75-6.75V8.25a6.75 6.75 0 10-13.5 0V12A6.75 6.75 0 0012 18.75zm0 0v2.5m-3.75 0h7.5" />
+                  </svg>
+                  Audio analysis — Voice patterns
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mb-8 px-2">

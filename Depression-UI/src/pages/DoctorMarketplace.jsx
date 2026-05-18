@@ -237,7 +237,7 @@ export default function DoctorMarketplace() {
                         Dr. {consultation.doctor?.name || "Doctor"}
                       </p>
                       <p className="text-sm text-[#6A766F]">
-                        {consultation.assessment?.severity} (Score: {consultation.assessment?.score}/24)
+                        {consultation.assessment?.severity || 'No assessment'} (Score: {consultation.assessment?.score != null ? consultation.assessment.score : '—'}/24)
                       </p>
                       <p className="text-xs text-[#999] mt-1">
                         {new Date(consultation.createdAt).toLocaleDateString()}

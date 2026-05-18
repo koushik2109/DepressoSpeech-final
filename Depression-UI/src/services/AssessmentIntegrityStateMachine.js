@@ -110,9 +110,9 @@ class AssessmentIntegrityStateMachine {
         break;
 
       case 'READY':
-        // Stay READY regardless of brief face loss
-        // Only go back to INITIALIZING if face is lost for a very long time
-        if (this.faceLostCount > this.constants.FACE_LOST_TOLERANCE * 3) {
+        // Transition back to INITIALIZING immediately when face is lost
+        // User must have continuous face presence to remain ready
+        if (!detected) {
           this.transitionTo('INITIALIZING');
         }
         break;
@@ -223,8 +223,8 @@ class AssessmentIntegrityStateMachine {
   getStateDescription() {
     const descriptions = {
       INITIALIZING: {
-        message: 'Show your face to the camera',
-        status: 'loading',
+        message: 'No face detected — show your face',
+        status: 'error',
       },
       READY: {
         message: 'Face detected — ready to record',

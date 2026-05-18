@@ -9,19 +9,33 @@ from config.settings import get_settings
 
 settings = get_settings()
 
-_connect_args = {}
-if "sqlite" in settings.DATABASE_URL:
-    _connect_args["check_same_thread"] = False
+_is_sqlite = "sqlite" in settings.DATABASE_URL
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DATABASE_ECHO,
-    connect_args=_connect_args,
-    # Connection pool settings — reduces per-request DB open/close overhead
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-)
+if _is_sqlite:
+    # SQLite + aiosqlite uses NullPool — pooling is meaningless for a local file
+    from sqlalchemy.pool import NullPool
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.DATABASE_ECHO,
+        connect_args=_connect_args,
+        poolclass=NullPool,
+    )
+else:
+    # PostgreSQL / other RDBMS — use a proper connection pool
+    # Pass ssl=False for local/dev PostgreSQL (asyncpg attempts SSL by default)
+    _pg_connect_args = {}
+    _pg_url = settings.DATABASE_URL
+    if "127.0.0.1" in _pg_url or "localhost" in _pg_url:
+        _pg_connect_args["ssl"] = False
+    engine = create_async_engine(
+        _pg_url,
+        echo=settings.DATABASE_ECHO,
+        connect_args=_pg_connect_args,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+    )
 
 # Enable WAL mode for SQLite: allows concurrent reads alongside writes,
 # dramatically reducing lock contention under parallel API requests.

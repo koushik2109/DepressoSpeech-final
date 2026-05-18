@@ -1,0 +1,17 @@
+audio:
+  sample_rate: 16000
+  frame_rate: 8
+  chunk_duration: 2.0
+  chunk_overlap: 0.5
+  mfcc_n_mfcc: 13
+  hubert_model_name: facebook/hubert-base-ls960
+  feature_backends:
+    - mfcc
+    - hubert
+video:
+  frame_rate: 8
+  temporal_window: 32
+  openface_csv_key: openface
+  embedding_backend: resnet50
+text:
+  transformer_model: sentence-transformers/all-mpnet-base-v2

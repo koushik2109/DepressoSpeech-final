@@ -49,25 +49,30 @@ function Metric({ label, value }) {
   );
 }
 
-function AudioPlayback({ fileId }) {
+function MediaPlayback({ fileId, isVideoHint = false }) {
   const [url, setUrl] = useState("");
+  const [mimeType, setMimeType] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!fileId) return undefined;
     let revoked = false;
     let objectUrl = "";
+    setLoading(true);
 
     getAudioBlobUrl(fileId)
-      .then(({ url: nextUrl }) => {
+      .then(({ url: nextUrl, blob }) => {
         if (revoked) {
           revokeBlobUrl(nextUrl);
           return;
         }
         objectUrl = nextUrl;
+        setMimeType(blob.type || "");
         setUrl(nextUrl);
       })
-      .catch((err) => setError(err.message || "Audio unavailable"));
+      .catch((err) => setError(err.message || "Media unavailable"))
+      .finally(() => setLoading(false));
 
     return () => {
       revoked = true;
@@ -76,24 +81,52 @@ function AudioPlayback({ fileId }) {
   }, [fileId]);
 
   if (!fileId) {
-    return <p className="text-sm text-[#9AA49F]">No audio saved.</p>;
+    return <p className="text-sm text-[#9AA49F]">No recording saved.</p>;
   }
-
   if (error) {
     return <p className="text-sm text-[#B45309]">{error}</p>;
   }
+  if (loading || !url) {
+    return <p className="text-sm text-[#6A766F]">Loading recording...</p>;
+  }
 
-  if (!url) {
-    return <p className="text-sm text-[#6A766F]">Loading audio...</p>;
+  const isVideo = isVideoHint || mimeType.startsWith("video/");
+
+  if (isVideo) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#075985] flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          Video + Audio Recording
+        </p>
+        <video
+          controls
+          controlsList="nodownload"
+          src={url}
+          className="w-full rounded-lg"
+          style={{ maxHeight: "240px" }}
+        />
+      </div>
+    );
   }
 
   return (
-    <audio
-      controls
-      controlsList="nodownload"
-      src={url}
-      className="h-11 w-full"
-    />
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#2D6A4F] flex items-center gap-1">
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6.75 6.75 0 006.75-6.75V8.25a6.75 6.75 0 10-13.5 0V12A6.75 6.75 0 0012 18.75zm0 0v2.5m-3.75 0h7.5" />
+        </svg>
+        Audio Recording
+      </p>
+      <audio
+        controls
+        controlsList="nodownload"
+        src={url}
+        className="h-11 w-full"
+      />
+    </div>
   );
 }
 
@@ -131,10 +164,13 @@ export default function AssessmentDetail() {
     () =>
       (assessment?.answers || []).map((answer) => ({
         name: `Q${answer.questionId}`,
-        score: answer.score ?? 0,
+        // Prefer real per-Q ML score from individual session analysis (mlScore)
+        score: answer.mlScore != null ? Math.round(answer.mlScore) : (answer.score ?? 0),
       })),
     [assessment?.answers],
   );
+
+  const mlModelDetails = assessment?.mlModelDetails;
 
   if (!user || user.role !== "patient") {
     return <Navigate to="/signin" replace />;
@@ -225,7 +261,9 @@ export default function AssessmentDetail() {
               Question Scores
             </h2>
             <p className="mt-1 text-sm text-[#6A766F]">
-              Estimated 0-3 score for each recorded PHQ-8 question.
+              {itemData.some((d) => d.score > 0)
+                ? "Per-question ML estimate (each video independently analysed, scaled 0-3)."
+                : "No per-question scores yet — run reeval after assessment."}
             </p>
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -257,53 +295,25 @@ export default function AssessmentDetail() {
           </section>
         )}
 
-        {mlDetails && (
-          <section className="rounded-2xl border border-[#E8E8E8] bg-white p-6">
-            <h2 className="text-xl font-bold text-[#1B1B1B]">
-              Model Summary Metrics
-            </h2>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Metric
-                label="Voice Score"
-                value={
-                  mlDetails.phq8Score != null
-                    ? `${mlDetails.phq8Score.toFixed(1)} / 24`
-                    : null
-                }
-              />
-              <Metric
-                label="Confidence"
-                value={
-                  mlDetails.confidenceScore != null
-                    ? `${(mlDetails.confidenceScore * 100).toFixed(0)}%`
-                    : null
-                }
-              />
-              <Metric
-                label="Audio Quality"
-                value={
-                  mlDetails.audioQualityScore != null
-                    ? `${(mlDetails.audioQualityScore * 100).toFixed(0)}%`
-                    : null
-                }
-              />
-              <Metric
-                label="Inference Time"
-                value={
-                  mlDetails.inferenceTimeMs != null
-                    ? `${(mlDetails.inferenceTimeMs / 1000).toFixed(1)}s`
-                    : null
-                }
-              />
-            </div>
-          </section>
-        )}
 
         <section className="rounded-2xl border border-[#E8E8E8] bg-white p-6 md:p-8">
-          <h2 className="text-xl font-bold text-[#1B1B1B]">
-            Recorded Question Responses
-          </h2>
-          <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-xl font-bold text-[#1B1B1B]">Recorded Question Responses</h2>
+            {assessment.hasVideoRecordings && (
+              <span className="rounded-full bg-[#E8F3FF] px-3 py-1 text-xs font-semibold text-[#075985] flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                Multimodal Session
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-[#6A766F] mb-6">
+            {assessment.hasVideoRecordings
+              ? "Video and audio recordings captured for trimodal analysis."
+              : "Audio recordings for each PHQ-8 question."}
+          </p>
+          <div className="space-y-4">
             {(assessment.answers || []).map((answer) => (
               <article
                 key={answer.questionId}
@@ -318,12 +328,14 @@ export default function AssessmentDetail() {
                       {answer.questionText}
                     </h3>
                   </div>
-                  <span className="w-fit rounded-full bg-white px-4 py-2 text-sm font-bold text-[#1B3A2D] ring-1 ring-[#D6E3DA]">
-                    Score {answer.score}/3
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="w-fit rounded-full bg-[#ECF8F3] px-4 py-2 text-sm font-bold text-[#1F7A66] ring-1 ring-[#D6E3DA]">
+                        Score {answer.mlScore != null ? Math.round(answer.mlScore) : (answer.score ?? 0)}/3
+                      </span>
+                  </div>
                 </div>
                 <div className="mt-4 rounded-xl border border-[#E8E8E8] bg-white p-3">
-                  <AudioPlayback fileId={answer.audioFileId} />
+                  <MediaPlayback fileId={answer.audioFileId} isVideoHint={Boolean(answer.isVideo)} />
                 </div>
               </article>
             ))}

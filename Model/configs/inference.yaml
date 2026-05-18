@@ -1,0 +1,19 @@
+artifacts:
+  checkpoint_path: checkpoints/best_model.pt
+model:
+  audio_dim: 33
+  video_dim: 40
+  text_dim: 163
+  fusion_dim: 32
+  num_questions: 8
+  fusion_mode: hybrid
+  encoder_type: conv_gru
+  num_layers: 1
+  dropout: 0.1
+inference:
+  device: auto
+  batch_size: 4
+api:
+  port: 8000
+logging:
+  log_dir: logs

@@ -1,132 +1,57 @@
-"""
-[LAYER_START] Session 9: API Schemas
-Request/response models for the REST API.
+from __future__ import annotations
 
-[INFERENCE_PATH] HTTP request → validated schema → inference pipeline → response schema.
-"""
-
-from datetime import datetime
-from typing import List, Optional, Any
-
-from pydantic import BaseModel, Field
-
-
-# =========================================================
-# Response Schemas
-# =========================================================
-
-
-class PredictionResponse(BaseModel):
-    """Single prediction result returned by the API."""
-
-    participant_id: str = Field(..., description="Identifier for the audio sample")
-    phq8_score: float = Field(..., ge=0.0, le=24.0, description="Predicted PHQ-8 score (0-24)")
-    severity: str = Field(..., description="Clinical severity category")
-    num_chunks: int = Field(..., ge=0, description="Number of audio chunks processed")
-    item_scores: Optional[List[int]] = Field(
-        default=None, description="Optional 0-3 item-level scores"
-    )
-    debug: Optional[dict[str, Any]] = Field(
-        default=None, description="Optional debug payload with intermediate outputs"
-    )
-    timestamp: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
-        description="ISO 8601 UTC timestamp of prediction",
-    )
-
-
-class BatchPredictionResponse(BaseModel):
-    """Response for batch prediction endpoint."""
-
-    predictions: List[PredictionResponse]
-    total: int = Field(..., description="Total number of files processed")
-    failed: List[str] = Field(
-        default_factory=list, description="Files that failed processing"
-    )
+from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
-
-    status: str = Field(..., description="Service status")
-    model_loaded: bool = Field(..., description="Whether the model is loaded")
-    device: str = Field(..., description="Inference device (cpu/cuda)")
-    timestamp: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
-    )
+    status: str
+    model_loaded: bool
+    description: str
 
 
-class ErrorResponse(BaseModel):
-    """Standard error response."""
-
-    error: str = Field(..., description="Error type")
-    detail: str = Field(..., description="Human-readable error message")
-
-
-class ExtendedPredictionResponse(BaseModel):
-    """Extended prediction with confidence, audio quality, and behavioral features."""
-
-    participant_id: str = Field(..., description="Identifier for the audio sample")
-    phq8_score: float = Field(..., ge=0.0, le=24.0, description="Predicted PHQ-8 score")
-    severity: str = Field(..., description="Clinical severity category")
-    num_chunks: int = Field(..., ge=0, description="Number of audio chunks processed")
-    inference_time_s: float = Field(..., description="Total inference time in seconds")
-    item_scores: Optional[List[int]] = Field(
-        default=None, description="Optional 0-3 item-level scores"
-    )
-    debug: Optional[dict[str, Any]] = Field(
-        default=None, description="Optional debug payload with intermediate outputs"
-    )
-    timestamp: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
-    )
-    confidence: dict = Field(..., description="MC Dropout uncertainty: mean, std, ci_lower, ci_upper")
-    audio_quality: dict = Field(..., description="Audio quality metrics: rms, snr_db, speech_prob, quality")
-    behavioral: dict = Field(..., description="Behavioral features extracted from audio")
+class AudioPayload(BaseModel):
+    audio_path: Optional[str] = None
+    audio_features: Optional[List[List[float]]] = None
+    metadata: Optional[dict] = None
 
 
-# ── Multimodal Schemas ────────────────────────────────
-
-class MultimodalAudioInput(BaseModel):
-    """Audio features as JSON arrays."""
-    mfcc: Optional[List[List[float]]] = Field(None, description="MFCC features (N×120)")
-    egemaps: Optional[List[List[float]]] = Field(None, description="eGeMAPS features (N×88)")
-    behavioral: Optional[List[float]] = Field(None, description="Behavioral features (16,)")
+class VideoPayload(BaseModel):
+    video_path: Optional[str] = None
+    openface_csv_path: Optional[str] = None
+    video_frames: Optional[List[List[int]]] = None
+    metadata: Optional[dict] = None
 
 
-class MultimodalVideoInput(BaseModel):
-    """Video features as JSON arrays."""
-    openface: Optional[List[List[float]]] = Field(None, description="OpenFace features (T×49)")
-    cnn_embed: Optional[List[List[float]]] = Field(None, description="CNN embeddings (T×512)")
+class TextPayload(BaseModel):
+    transcript: Optional[str] = None
+    chunked_transcript: Optional[List[str]] = None
+    metadata: Optional[dict] = None
 
 
-class MultimodalTextInput(BaseModel):
-    """Text features."""
-    raw_text: Optional[str] = Field(None, description="Raw transcript text")
-    embeddings: Optional[List[List[float]]] = Field(None, description="Pre-extracted text embeddings (N×384)")
+class MultimodalPayload(BaseModel):
+    audio_features: Optional[List[List[float]]] = None
+    video_features: Optional[List[List[float]]] = None
+    text_features: Optional[List[List[float]]] = None
+    audio_mask: Optional[List[bool]] = None
+    video_mask: Optional[List[bool]] = None
+    text_mask: Optional[List[bool]] = None
+    metadata: Optional[dict] = None
 
 
-class MultimodalRequest(BaseModel):
-    """Full multimodal prediction request."""
-    session_id: Optional[str] = Field(None, description="Session identifier")
-    participant_id: str = Field("unknown", description="Participant identifier")
-    audio_features: Optional[MultimodalAudioInput] = None
-    video_features: Optional[MultimodalVideoInput] = None
-    text_features: Optional[MultimodalTextInput] = None
-
-
-class MultimodalPredictionResponse(BaseModel):
-    """Multimodal prediction response."""
-    session_id: Optional[str] = None
-    participant_id: str
-    phq8_score: float = Field(..., ge=0.0, le=24.0)
-    severity: str
+class PredictionResponse(BaseModel):
+    phq_total: float
+    phq_questions: List[float]
+    classification: float
     confidence: float
-    modalities_used: List[str]
-    modality_contributions: dict
-    inference_time_s: float
-    debug: Optional[dict] = None
-    timestamp: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
-    )
+    modality_scores: dict
+    entropy: float
+    metadata: Optional[dict] = None
+    processing_details: Optional[dict] = None
 
+    @field_validator("phq_questions")
+    @classmethod
+    def validate_phq_questions(cls, value: List[float]) -> List[float]:
+        if len(value) != 8:
+            raise ValueError("phq_questions must contain 8 values")
+        return value

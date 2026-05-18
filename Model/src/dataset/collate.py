@@ -1,78 +1,68 @@
-"""
-[LAYER_START] Session 5: Collate Function
-Pads variable-length sequences and generates attention masks for batching.
-
-[BOTH PATHS] Same collation logic for training and inference.
-"""
-
+from typing import Any, Dict, List
 import torch
-import logging
-from typing import Dict, List
-
-logger = logging.getLogger(__name__)
 
 
-def depression_collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
-    """
-    [BOTH PATHS] Collate function for DataLoader.
+def _detect_dim(batch: List[Dict[str, Any]], key: str) -> int:
+    for item in batch:
+        value = item.get(key)
+        if value is not None and value.ndim == 2:
+            return value.shape[1]
+    return 0
 
-    Pads variable-length feature sequences to the max length in the batch
-    and generates boolean attention masks.
 
-    Args:
-        batch: List of dicts from DepressionDataset.__getitem__()
-            Each dict has: 'features' (T_i, 592), 'label' (scalar),
-                          'length' (int), 'participant_id' (str)
-
-    Returns:
-        Dict with:
-            'features': Tensor (B, T_max, 592) - zero-padded
-            'labels': Tensor (B,) - PHQ-8 scores
-            'lengths': Tensor (B,) - actual sequence lengths (int64)
-            'mask': Tensor (B, T_max) - True for real chunks, False for padding
-            'participant_ids': List[str]
-    """
-    # Sort by length descending (useful for pack_padded_sequence if needed)
-    batch = sorted(batch, key=lambda x: x['length'], reverse=True)
-
-    lengths = [item['length'] for item in batch]
-    max_len = max(lengths)
-    feature_dim = batch[0]['features'].shape[1]  # 592
+def multimodal_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     batch_size = len(batch)
+    audio_lengths = [item["audio"].shape[0] if item["audio"] is not None else 0 for item in batch]
+    video_lengths = [item["video"].shape[0] if item["video"] is not None else 0 for item in batch]
+    text_lengths = [item["text"].shape[0] if item["text"] is not None else 0 for item in batch]
 
-    # [DATA_FLOW] Pad sequences to max_len
-    padded_features = torch.zeros(batch_size, max_len, feature_dim, dtype=torch.float32)
-    labels = torch.zeros(batch_size, dtype=torch.float32)
-    mask = torch.zeros(batch_size, max_len, dtype=torch.bool)
-    item_scores = torch.zeros(batch_size, 8, dtype=torch.float32)
-    binary_labels = torch.zeros(batch_size, dtype=torch.float32)
+    max_audio = max(audio_lengths) if audio_lengths else 0
+    max_video = max(video_lengths) if video_lengths else 0
+    max_text = max(text_lengths) if text_lengths else 0
 
+    audio_dim = _detect_dim(batch, "audio")
+    video_dim = _detect_dim(batch, "video")
+    text_dim = _detect_dim(batch, "text")
+
+    audio_tensor = torch.zeros(batch_size, max_audio, audio_dim, dtype=torch.float32)
+    video_tensor = torch.zeros(batch_size, max_video, video_dim, dtype=torch.float32)
+    text_tensor = torch.zeros(batch_size, max_text, text_dim, dtype=torch.float32)
+    audio_mask = torch.zeros(batch_size, max_audio, dtype=torch.bool)
+    video_mask = torch.zeros(batch_size, max_video, dtype=torch.bool)
+    text_mask = torch.zeros(batch_size, max_text, dtype=torch.bool)
+
+    phq_totals = torch.zeros(batch_size, dtype=torch.float32)
+    phq_questions = torch.zeros(batch_size, 8, dtype=torch.float32)
+    classifications = torch.zeros(batch_size, dtype=torch.float32)
     participant_ids = []
 
     for i, item in enumerate(batch):
-        seq_len = item['length']
-        padded_features[i, :seq_len, :] = item['features'][:seq_len]
-        labels[i] = item['label']
-        mask[i, :seq_len] = True
-        participant_ids.append(item['participant_id'])
-        if 'item_scores' in item:
-            item_scores[i] = item['item_scores']
-        if 'binary_label' in item:
-            binary_labels[i] = item['binary_label']
-
-    lengths_tensor = torch.tensor(lengths, dtype=torch.int64)
-
-    logger.debug(
-        f"[DATA_FLOW] Collated batch: B={batch_size}, T_max={max_len}, "
-        f"D={feature_dim}, lengths={lengths}"
-    )
+        if item["audio"] is not None:
+            length = item["audio"].shape[0]
+            audio_tensor[i, :length] = item["audio"]
+            audio_mask[i, :length] = True
+        if item["video"] is not None:
+            length = item["video"].shape[0]
+            video_tensor[i, :length] = item["video"]
+            video_mask[i, :length] = True
+        if item["text"] is not None:
+            length = item["text"].shape[0]
+            text_tensor[i, :length] = item["text"]
+            text_mask[i, :length] = True
+        phq_totals[i] = item["phq_total"]
+        phq_questions[i] = item["phq_questions"]
+        classifications[i] = item["classification"]
+        participant_ids.append(item["participant_id"])
 
     return {
-        'features': padded_features,       # (B, T_max, D)
-        'labels': labels,                   # (B,)
-        'lengths': lengths_tensor,          # (B,)
-        'mask': mask,                       # (B, T_max)
-        'participant_ids': participant_ids,  # List[str]
-        'item_labels': item_scores,         # (B, 8)
-        'binary_labels': binary_labels,     # (B,)
+        "audio": audio_tensor,
+        "video": video_tensor,
+        "text": text_tensor,
+        "audio_mask": audio_mask,
+        "video_mask": video_mask,
+        "text_mask": text_mask,
+        "phq_total": phq_totals,
+        "phq_questions": phq_questions,
+        "classification": classifications,
+        "participant_ids": participant_ids,
     }

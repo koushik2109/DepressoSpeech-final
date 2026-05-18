@@ -89,6 +89,10 @@ class MultimodalSession(Base):
     modalities_used = Column(Text, nullable=True)  # JSON list
     debug_json = Column(Text, nullable=True)
     inference_time_ms = Column(Float, nullable=True)
+    # Classification extras
+    is_classification = Column(Boolean, default=False)
+    depression_probability = Column(Float, nullable=True)
+    predicted_label = Column(Integer, nullable=True)
 
     # Processing
     job_id = Column(String(36), nullable=True)
@@ -129,7 +133,7 @@ class MultimodalRequest(BaseModel):
 
 
 class MultimodalResponse(BaseModel):
-    """Multimodal prediction response."""
+    """Multimodal prediction response. Supports regression and binary classification."""
     session_id: str
     phq8_score: float
     severity: str
@@ -138,6 +142,10 @@ class MultimodalResponse(BaseModel):
     modality_contributions: Dict[str, float]
     inference_time_ms: float
     status: str
+    # Classification extras
+    is_classification: bool = False
+    depression_probability: Optional[float] = None
+    predicted_label: Optional[int] = None
 
 
 class SessionStatusResponse(BaseModel):
@@ -522,18 +530,34 @@ async def _run_multimodal_inference(session_id: str, user_id: str) -> dict:
                 participant_id=user_id,
             )
 
-            # Store results
-            session.phq8_score = result.get("phq8_score", 0.0)
-            session.severity = _severity_label(session.phq8_score)
+            # Store results — ML server returns 'phq_total'; fallback to 'phq8_score'
+            # for local-fallback responses which still use 'phq8_score'.
+            raw_phq = result.get("phq_total") or result.get("phq8_score") or 0.0
+            session.phq8_score = float(max(0.0, min(24.0, raw_phq)))
+            session.severity = result.get("severity") or _severity_label(session.phq8_score)
             session.confidence = result.get("confidence", 0.0)
 
-            contributions = result.get("modality_contributions", {})
+            # Classification fields — ML server returns 'classification' (sigmoid prob)
+            classification_prob = result.get("classification") or result.get("depression_probability")
+            session.is_classification = classification_prob is not None
+            session.depression_probability = float(classification_prob) if classification_prob is not None else None
+            session.predicted_label = int(classification_prob > 0.5) if classification_prob is not None else result.get("predicted_label")
+
+            # ML server returns 'modality_scores'; local fallback uses 'modality_contributions'
+            contributions = result.get("modality_contributions") or result.get("modality_scores") or {}
             session.audio_contribution = contributions.get("audio", 0.0)
             session.video_contribution = contributions.get("video", 0.0)
             session.text_contribution = contributions.get("text", 0.0)
-            session.modalities_used = json.dumps(result.get("modalities_used", []))
-            session.debug_json = json.dumps(result.get("debug", {}))
-            session.inference_time_ms = result.get("inference_time_s", 0.0) * 1000
+            session.modalities_used = json.dumps(result.get("modalities_used", ["audio", "video", "text"]))
+            # Preserve fields set at session creation (e.g. question_id) then merge ML debug
+            try:
+                _existing = json.loads(session.debug_json or "{}")
+            except Exception:
+                _existing = {}
+            session.debug_json = json.dumps({**_existing, **result.get("debug", {})})
+            # ML server nests time under processing_details; local fallback uses inference_time_s
+            proc_details = result.get("processing_details") or {}
+            session.inference_time_ms = (proc_details.get("total_seconds") or result.get("inference_time_s") or 0.0) * 1000
 
             session.status = "completed"
 
@@ -554,6 +578,9 @@ async def _run_multimodal_inference(session_id: str, user_id: str) -> dict:
                 "modality_contributions": contributions,
                 "inference_time_ms": round(session.inference_time_ms, 2),
                 "status": "completed",
+                "is_classification": session.is_classification,
+                "depression_probability": session.depression_probability,
+                "predicted_label": session.predicted_label,
             }
 
         except Exception as e:
@@ -615,6 +642,9 @@ async def get_multimodal_results(
         "has_video": session.has_video,
         "has_text": session.has_text,
         "inference_time_ms": session.inference_time_ms,
+        "is_classification": session.is_classification,
+        "depression_probability": session.depression_probability,
+        "predicted_label": session.predicted_label,
         "debug": debug,
         "error": session.error_message,
         "created_at": session.created_at.isoformat() if session.created_at else None,
@@ -658,6 +688,9 @@ async def get_job_status(
                 "phq8_score": session.phq8_score,
                 "severity": session.severity,
                 "confidence": session.confidence,
+                "is_classification": session.is_classification,
+                "depression_probability": session.depression_probability,
+                "predicted_label": session.predicted_label,
             } if session.status == "completed" else None,
             "error": session.error_message,
         }
@@ -1092,6 +1125,7 @@ async def get_batch_history(
 async def process_video_recording(
     file: UploadFile = File(..., description="Recorded video file (webm/mp4)"),
     enable_stt: bool = Form(True, description="Enable speech-to-text transcription"),
+    fast_mode: bool = Form(False, description="Skip heavy video processing for real-time scoring"),
     user: User = Depends(require_patient),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1102,16 +1136,27 @@ async def process_video_recording(
     and optionally transcribes speech. Runs the trimodal fusion model
     and returns predictions with modality contributions.
 
+    **Fast Mode** (fast_mode=True):
+    - Audio-only mode for real-time scoring
+    - Skips MediaPipe face detection (~15-20s)
+    - Skips ResNet50 CNN extraction (~5-10s)
+    - Skips Whisper transcription (~5-10s)
+    - Uses only audio features (MFCC, eGeMAPS, behavioral)
+    - Target: 3-5 seconds for 30s video
+    - Scores vary based on: voice tone, speaking rate, pauses, energy
+    - Use for per-question real-time feedback
+
+    **Full Mode** (fast_mode=False, default):
+    - Complete trimodal processing (audio + video + text)
+    - Takes 30-60 seconds for 30s video
+    - Uses all modalities for maximum accuracy
+    - Use for final assessment
+
     No raw video is stored permanently — only extracted features persist.
 
     Pipeline:
-        1. Save temp video
-        2. FFmpeg → extract audio (WAV) + frames (JPG)
-        3. Audio → eGeMAPS + MFCC features
-        4. Frames → OpenFace + CNN features
-        5. Audio → STT → text features (optional)
-        6. Run multimodal prediction
-        7. Cleanup temp files
+        Fast Mode:  Video → Audio extraction → Audio features → Score (3-5s)
+        Full Mode:  Video → Audio + Frames + STT → All features → Score (30-60s)
 
     Returns:
         Prediction result with PHQ-8 score, severity, confidence,
@@ -1129,8 +1174,17 @@ async def process_video_recording(
     max_size = settings.VIDEO_MAX_FILE_SIZE_MB * 1024 * 1024
     processor = VideoProcessor()
 
+    # Extract question_id from filename: "q3.webm" → 3 (enables real per-Q scoring)
+    import re as _re
+    _qm = _re.match(r'q(\d+)\.', file.filename or '')
+    _question_id = int(_qm.group(1)) if _qm else None
+
     # Create session
-    session = MultimodalSession(user_id=user.id, status="processing")
+    session = MultimodalSession(
+        user_id=user.id,
+        status="processing",
+        debug_json=json.dumps({"question_id": _question_id}) if _question_id else None,
+    )
     db.add(session)
     await db.flush()
 
@@ -1178,7 +1232,8 @@ async def process_video_recording(
         processing_result = await processor.process_video(
             video_path=video_path,
             session_id=session.id,
-            enable_stt=enable_stt,
+            enable_stt=enable_stt and not fast_mode,  # Skip STT in fast mode
+            fast_mode=fast_mode,  # NEW: Pass fast_mode flag
         )
 
         # Update progress

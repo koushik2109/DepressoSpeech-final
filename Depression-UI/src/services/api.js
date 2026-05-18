@@ -1,4 +1,4 @@
-const API_BASE = "/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 const SESSION_KEY = "mindscope-session";
 const ADMIN_SESSION_KEY = "mindscope-admin-session";
 const SESSION_EVENT = "mindscope-session-updated";
@@ -71,7 +71,12 @@ const _inflight = new Map();
 // ── HTTP helper ─────────────────────────────────────────
 
 async function apiFetch(path, options = {}) {
-  const { skipCache = false, rawBody = false, timeout, ...fetchOptions } = options;
+  const {
+    skipCache = false,
+    rawBody = false,
+    timeout,
+    ...fetchOptions
+  } = options;
   const session = readJson(sessionStore, SESSION_KEY);
   const headers = {
     ...(rawBody ? {} : { "Content-Type": "application/json" }),
@@ -349,6 +354,26 @@ export async function scoreQuestionAudio({
   });
 }
 
+export async function scoreQuestionVideo({
+  questionId,
+  videoBlob,
+  filename = "recording.webm",
+  enableSTT = false,
+  fastMode = true,
+}) {
+  const result = await processVideoRecording(
+    videoBlob,
+    filename,
+    enableSTT,
+    fastMode,
+  );
+  return {
+    questionId: Number(questionId),
+    result,
+    inferenceTimeMs: Number(result?.inference_time_ms ?? 0),
+  };
+}
+
 export async function listAssessments() {
   const data = await apiFetch("/assessments?page=1&pageSize=100");
   const user = getCurrentUser();
@@ -358,6 +383,7 @@ export async function listAssessments() {
     score: a.score,
     severity: a.severity,
     recordingCount: a.recordingCount,
+    hasVideoRecordings: Boolean(a.hasVideoRecordings),
     status: a.status,
     reportStatus: a.reportStatus,
     isReportReady: a.isReportReady,
@@ -653,7 +679,12 @@ export async function processMultimodal(payload) {
  * @param {File}   [params.egemapsFile]   - eGeMAPS features CSV
  * @param {File}   [params.behavioralFile] - Behavioral features CSV
  */
-export async function uploadMultimodalAudio({ sessionId, mfccFile, egemapsFile, behavioralFile }) {
+export async function uploadMultimodalAudio({
+  sessionId,
+  mfccFile,
+  egemapsFile,
+  behavioralFile,
+}) {
   const form = new FormData();
   if (sessionId) form.append("session_id", sessionId);
   if (mfccFile) form.append("mfcc_file", mfccFile);
@@ -675,7 +706,11 @@ export async function uploadMultimodalAudio({ sessionId, mfccFile, egemapsFile, 
  * @param {File}   [params.openfaceFile]  - OpenFace features CSV
  * @param {File}   [params.cnnFile]       - CNN embedding CSV
  */
-export async function uploadMultimodalVideo({ sessionId, openfaceFile, cnnFile }) {
+export async function uploadMultimodalVideo({
+  sessionId,
+  openfaceFile,
+  cnnFile,
+}) {
   const form = new FormData();
   if (sessionId) form.append("session_id", sessionId);
   if (openfaceFile) form.append("openface_file", openfaceFile);
@@ -735,16 +770,22 @@ export async function getMultimodalStatus(sessionId) {
  * @param {boolean} [enableSTT=true] - Enable speech-to-text
  * @returns {Promise<Object>} Prediction result with modality contributions
  */
-export async function processVideoRecording(videoBlob, filename = "recording.webm", enableSTT = true) {
+export async function processVideoRecording(
+  videoBlob,
+  filename = "recording.webm",
+  enableSTT = true,
+  fastMode = false,
+) {
   const form = new FormData();
   form.append("file", videoBlob, filename);
   form.append("enable_stt", enableSTT.toString());
+  form.append("fast_mode", fastMode.toString()); // NEW: Enable fast mode for per-question scoring
   return apiFetch("/multimodal/process/video", {
     method: "POST",
     body: form,
     skipCache: true,
     rawBody: true,
-    timeout: 180000,  // 3 min timeout for video processing
+    timeout: fastMode ? 30000 : 180000, // 30s for fast mode, 3min for full processing
   });
 }
 
@@ -800,7 +841,11 @@ export async function listConsultations(status) {
  * @param {boolean} [params.include_transcript=true] - Include transcript features
  * @returns {Promise<Object>} Batch processing results
  */
-export async function processBatch({ participant_ids, data_root, include_transcript = true }) {
+export async function processBatch({
+  participant_ids,
+  data_root,
+  include_transcript = true,
+}) {
   return apiFetch("/multimodal/process/batch", {
     method: "POST",
     body: JSON.stringify({ participant_ids, data_root, include_transcript }),
@@ -820,10 +865,20 @@ export async function processBatch({ participant_ids, data_root, include_transcr
  * @param {string} [params.transcript_text] - Raw transcript text
  * @returns {Promise<Object>} Prediction result
  */
-export async function processFeatures({ participant_id, egemaps_data, mfcc_data, transcript_text }) {
+export async function processFeatures({
+  participant_id,
+  egemaps_data,
+  mfcc_data,
+  transcript_text,
+}) {
   return apiFetch("/multimodal/process/features", {
     method: "POST",
-    body: JSON.stringify({ participant_id, egemaps_data, mfcc_data, transcript_text }),
+    body: JSON.stringify({
+      participant_id,
+      egemaps_data,
+      mfcc_data,
+      transcript_text,
+    }),
     headers: { "Content-Type": "application/json" },
     skipCache: true,
     timeout: 120000,
@@ -837,6 +892,7 @@ export async function processFeatures({ participant_id, egemaps_data, mfcc_data,
  * @returns {Promise<Object>} Batch history items
  */
 export async function getBatchHistory(limit = 20) {
-  return apiFetch(`/multimodal/batch/history?limit=${limit}`, { skipCache: true });
+  return apiFetch(`/multimodal/batch/history?limit=${limit}`, {
+    skipCache: true,
+  });
 }
-

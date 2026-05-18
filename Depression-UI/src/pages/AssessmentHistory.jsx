@@ -97,67 +97,116 @@ export default function AssessmentHistory() {
                   item.status === "completed" ||
                   item.reportStatus === "available" ||
                   item.isReportReady;
+                const hasMlScore = item.mlScore != null && !Number.isNaN(Number(item.mlScore));
+                const mlScoreRounded = hasMlScore ? Math.round(Number(item.mlScore) * 10) / 10 : null;
+                const hasVideo = Boolean(item.hasVideoRecordings);
+                const hasRemarks = Boolean(item.doctorRemarks);
                 return (
                   <article
                     key={item.id}
-                    className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] px-4 py-4 transition-colors hover:border-[#B7E4C7] hover:bg-[#F3FBF7] md:px-5 md:py-5"
+                    className="rounded-xl border border-[#E8E8E8] bg-[#FAFAF7] px-5 py-5 transition-colors hover:border-[#B7E4C7] hover:bg-[#F3FBF7]"
                   >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    {/* Row 1 — session label + action */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-sm text-[#6A766F]">
-                          Session #{assessments.length - index}
-                        </p>
-                        <p className="text-xs text-[#9AA49F]">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-[#1B1B1B]">
+                            Session #{assessments.length - index}
+                          </p>
+                          {/* Status badge */}
+                          {!isCompleted && item.status === "failed" && (
+                            <span className="rounded-full bg-[#FEE2E2] px-2.5 py-0.5 text-xs font-semibold text-[#991B1B]">Failed</span>
+                          )}
+                          {!isCompleted && item.status !== "failed" && (
+                            <span className="rounded-full bg-[#FEF3C7] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">Processing</span>
+                          )}
+                          {isCompleted && (
+                            <span className="rounded-full bg-[#D8F3DC] px-2.5 py-0.5 text-xs font-semibold text-[#2D6A4F]">Completed</span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-[#9AA49F]">
                           {new Date(item.createdAt).toLocaleString()}
                         </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="rounded-full bg-[#ECF8F3] px-3 py-1 text-xs font-semibold text-[#1F7A66]">
-                          Score {item.score}/24
-                        </span>
-
-                        {!isCompleted && item.status === "failed" && (
-                          <span className="rounded-full bg-[#FEE2E2] px-3 py-1 text-xs font-semibold text-[#991B1B]">
-                            Failed
-                          </span>
-                        )}
-                        {!isCompleted && item.status !== "failed" && (
-                          <span className="rounded-full bg-[#FEF3C7] px-3 py-1 text-xs font-semibold text-[#92400E]">
-                            Processing
-                          </span>
-                        )}
-                        {isCompleted && (
-                          <span className="rounded-full bg-[#D8F3DC] px-3 py-1 text-xs font-semibold text-[#2D6A4F]">
-                            Completed
-                          </span>
-                        )}
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-semibold ${severityTone[item.severity] || "bg-gray-50 text-gray-700 border-gray-200"}`}
+                      {isCompleted ? (
+                        <Link
+                          to={`/assessment-history/${item.id}`}
+                          className="self-start rounded-lg bg-[#1B3A2D] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2D6A4F] whitespace-nowrap"
                         >
-                          {item.severity}
-                        </span>
-                        {isCompleted ? (
-                          <Link
-                            to={`/assessment-history/${item.id}`}
-                            className="rounded-lg bg-[#1B3A2D] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2D6A4F]"
-                          >
-                            Open Report
-                          </Link>
-                        ) : (
-                          <span className="rounded-lg bg-[#E8E8E8] px-3 py-2 text-sm font-semibold text-[#9AA49F]">
-                            {item.status === "failed" ? "Unavailable" : "Processing"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm text-[#5F6B65]">
-                      Responses captured: {item.recordingCount || 0} / 8
-                      {item.mlSeverity && item.mlSeverity !== item.severity && (
-                        <span className="ml-3 text-xs text-[#9AA49F]">
-                          ML severity: {item.mlSeverity}
+                          Open Report
+                        </Link>
+                      ) : (
+                        <span className="self-start rounded-lg bg-[#E8E8E8] px-4 py-2 text-sm font-semibold text-[#9AA49F] whitespace-nowrap">
+                          {item.status === "failed" ? "Unavailable" : "Processing…"}
                         </span>
                       )}
-                    </p>
+                    </div>
+
+                    {/* Row 2 — score metrics grid */}
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#6A766F]">PHQ Score</p>
+                        <p className="mt-1 text-lg font-bold text-[#1B1B1B]">
+                          {item.score != null ? `${item.score}/24` : "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#6A766F]">Severity</p>
+                        <p className={`mt-1 text-sm font-bold truncate ${
+                          item.severity === "Severe" ? "text-red-600"
+                          : item.severity === "Moderately Severe" ? "text-orange-600"
+                          : item.severity === "Moderate" ? "text-amber-600"
+                          : item.severity === "Mild" ? "text-emerald-600"
+                          : "text-green-600"
+                        }`}>
+                          {item.severity || "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#6A766F]">ML Score</p>
+                        <p className="mt-1 text-lg font-bold text-[#2D6A4F]">
+                          {hasMlScore ? `${mlScoreRounded}/24` : "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[#6A766F]">Responses</p>
+                        <p className="mt-1 text-lg font-bold text-[#1B1B1B]">
+                          {item.recordingCount || 0}/8
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Row 3 — feature badges */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {hasVideo ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#E8F3FF] px-3 py-1 text-xs font-semibold text-[#075985]">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                          Video + Audio
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#F0FDF4] px-3 py-1 text-xs font-semibold text-[#166534]">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6.75 6.75 0 006.75-6.75V8.25a6.75 6.75 0 10-13.5 0V12A6.75 6.75 0 0012 18.75zm0 0v2.5m-3.75 0h7.5" />
+                          </svg>
+                          Audio Only
+                        </span>
+                      )}
+                      {item.mlSeverity && (
+                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${severityTone[item.mlSeverity] || "bg-gray-50 text-gray-700 border-gray-200"}`}>
+                          ML: {item.mlSeverity}
+                        </span>
+                      )}
+                      {hasRemarks && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#F5F3FF] px-3 py-1 text-xs font-semibold text-[#6D28D9]">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                          </svg>
+                          Doctor Remarks
+                        </span>
+                      )}
+                    </div>
                   </article>
                 );
               })}

@@ -4,7 +4,7 @@ import json
 import logging
 import math
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -103,6 +103,20 @@ def _safe_json_loads(value: str | None, default=None):
         return json.loads(value)
     except (json.JSONDecodeError, TypeError):
         return fallback
+
+
+async def _has_video_recordings_for_assessment(assessment_id: str, db: AsyncSession) -> bool:
+    result = await db.execute(
+        select(MediaFile.mime_type)
+        .select_from(AssessmentAnswer)
+        .join(MediaFile, AssessmentAnswer.audio_file_id == MediaFile.id)
+        .where(
+            AssessmentAnswer.assessment_id == assessment_id,
+            MediaFile.mime_type.like("video/%"),
+        )
+        .limit(1)
+    )
+    return bool(result.scalar_one_or_none())
 
 
 def distribute_total_score(total_score: int, answers: list, media_by_id: dict) -> dict[int, int]:
@@ -313,6 +327,7 @@ async def create_assessment(
 
     assessment_id = assessment.id
     user_id = user.id
+    has_video = await _has_video_recordings_for_assessment(assessment_id, db)
 
     # If audio was recorded, trigger background ML inference
     if should_run_background_ml and audio_file_ids:
@@ -336,7 +351,10 @@ async def create_assessment(
             "severity": assessment.severity,
             "status": assessment.status,
             "reportStatus": assessment.report_status,
+            "reportReady": assessment.is_report_ready,
             "isReportReady": assessment.is_report_ready,
+            "hasVideoRecordings": has_video,
+            "stage": "Completed" if assessment.is_report_ready else "Loading voice responses",
             "createdAt": assessment.created_at.isoformat() if assessment.created_at else None,
         }
     }
@@ -386,7 +404,7 @@ async def score_question_audio(
             detail=f"Voice model service is unavailable. {message}",
         ) from exc
 
-    ml_score = max(0.0, min(24.0, float(ml_result.get("phq8_score") or 0.0)))
+    ml_score = max(0.0, min(24.0, float(ml_result.get("phq_total") or ml_result.get("phq8_score") or 0.0)))
     question_score = score_from_ml_output(
         question_id=body.questionId,
         ml_phq8_score=ml_score,
@@ -428,6 +446,7 @@ async def get_latest_assessment(
         select(AssessmentAnswer).where(AssessmentAnswer.assessment_id == assessment.id)
     )
     answers_map = {str(a.question_id): a.score for a in answers_result.scalars().all()}
+    has_video = await _has_video_recordings_for_assessment(assessment.id, db)
 
     return {
         "assessment": {
@@ -436,6 +455,7 @@ async def get_latest_assessment(
             "severity": assessment.severity,
             "answers": answers_map,
             "recordingCount": assessment.recording_count,
+            "hasVideoRecordings": has_video,
             "status": assessment.status,
             "reportStatus": assessment.report_status,
             "isReportReady": assessment.is_report_ready,
@@ -471,12 +491,25 @@ async def list_assessments(
     )
     assessments = result.scalars().all()
 
+    video_map = {}
+    if assessments:
+        assessment_ids = [a.id for a in assessments]
+        video_rows = await db.execute(
+            select(AssessmentAnswer.assessment_id, MediaFile.mime_type)
+            .join(MediaFile, AssessmentAnswer.audio_file_id == MediaFile.id)
+            .where(AssessmentAnswer.assessment_id.in_(assessment_ids))
+        )
+        for assessment_id, mime_type in video_rows.all():
+            if mime_type and mime_type.startswith("video/"):
+                video_map[assessment_id] = True
+
     items = [
         {
             "id": a.id,
             "score": a.score_total,
             "severity": a.severity,
             "recordingCount": a.recording_count,
+            "hasVideoRecordings": bool(video_map.get(a.id)),
             "status": "completed" if _is_report_ready(a) else a.status,
             "reportStatus": "available" if _is_report_ready(a) else (a.report_status or "pending"),
             "isReportReady": _is_report_ready(a),
@@ -549,6 +582,60 @@ async def get_assessment_detail(
     )).scalar_one_or_none()
 
     questions_by_id = {item["id"]: item for item in PHQ8_QUESTIONS}
+    has_video = any(
+        getattr(media_by_id.get(answer.audio_file_id), "mime_type", "",).startswith("video/")
+        for answer in answers
+        if answer.audio_file_id
+    )
+
+    # ── Fetch associated MultimodalSessions for real ML metrics ──────────
+    from src.routes.multimodal import MultimodalSession
+    _ts = assessment.created_at
+    _mm_sessions = (await db.execute(
+        select(MultimodalSession)
+        .where(
+            MultimodalSession.user_id == assessment.user_id,
+            MultimodalSession.status == "completed",
+            MultimodalSession.created_at >= _ts - timedelta(minutes=1),
+            MultimodalSession.created_at <= _ts + timedelta(minutes=15),
+        )
+        .order_by(MultimodalSession.created_at)
+    )).scalars().all()
+
+    # Build question_id → per-question ML score map (real: each session analysed ONE question)
+    _q_score_map: dict = {}
+    _inference_times = []
+    for _s in _mm_sessions:
+        if _s.inference_time_ms:
+            _inference_times.append(_s.inference_time_ms)
+        try:
+            _dbg = json.loads(_s.debug_json or "{}")
+            _qid = _dbg.get("question_id")
+            if _qid and _s.phq8_score is not None:
+                # Each session predicts full PHQ-8 total; divide by 8 to get per-Q estimate (0-3)
+                _q_score_map[int(_qid)] = round(min(3.0, max(0.0, float(_s.phq8_score) / 8.0)), 2)
+        except Exception:
+            pass
+
+    # Pick the "primary" session (last = combined reeval if reeval was run, else latest question)
+    _primary = _mm_sessions[-1] if _mm_sessions else None
+    _ml_model_details = None
+    if _primary:
+        _ml_model_details = {
+            "confidence": round(float(_primary.confidence or 0), 4),
+            "depressionProbability": round(float(_primary.depression_probability or 0), 4) if _primary.depression_probability is not None else None,
+            "predictedLabel": _primary.predicted_label,
+            "modalityContributions": {
+                "audio": round(float(_primary.audio_contribution or 0), 4),
+                "video": round(float(_primary.video_contribution or 0), 4),
+                "text":  round(float(_primary.text_contribution  or 0), 4),
+            },
+            "avgInferenceTimeMs": round(sum(_inference_times) / len(_inference_times), 1) if _inference_times else None,
+            "totalInferenceTimeMs": round(sum(_inference_times), 1) if _inference_times else None,
+            "sessionCount": len(_mm_sessions),
+            "perQuestionScores": _q_score_map,  # {1: 1.58, 2: 1.58, ...} — real per-Q from individual sessions
+        }
+
     return {
         "assessment": {
             "id": assessment.id,
@@ -556,6 +643,7 @@ async def get_assessment_detail(
             "score": assessment.score_total,
             "severity": assessment.severity,
             "recordingCount": assessment.recording_count,
+            "hasVideoRecordings": has_video,
             "status": assessment.status,
             "reportStatus": assessment.report_status,
             "isReportReady": assessment.is_report_ready,
@@ -568,8 +656,13 @@ async def get_assessment_detail(
                     "questionId": answer.question_id,
                     "questionText": questions_by_id.get(answer.question_id, {}).get("text", ""),
                     "score": answer.score,
+                    "mlScore": _q_score_map.get(answer.question_id),
                     "durationSec": answer.duration_sec,
                     "audioFileId": answer.audio_file_id,
+                    "isVideo": bool(
+                        answer.audio_file_id
+                        and getattr(media_by_id.get(answer.audio_file_id), "mime_type", "",).startswith("video/")
+                    ),
                     "audioUrl": f"/api/v1/files/audio/{answer.audio_file_id}" if answer.audio_file_id in media_by_id else None,
                     "fileName": getattr(media_by_id.get(answer.audio_file_id), "original_filename", None),
                     "fileSize": getattr(media_by_id.get(answer.audio_file_id), "file_size", None),
@@ -577,6 +670,7 @@ async def get_assessment_detail(
                 for answer in answers
             ],
             "mlDetails": ml_detail_payload(detail, assessment),
+            "mlModelDetails": _ml_model_details,
         }
     }
 
@@ -644,8 +738,8 @@ async def processing_status(
         "mlSeverity": assessment.ml_severity,
         "elapsedSec": elapsed_sec,
         "stageElapsedSec": stage_elapsed_sec,
-        "remainingTargetSec": max(0.0, 60 - elapsed_sec),
-        "targetMaxSec": 60,
+        "remainingTargetSec": max(0.0, 120 - elapsed_sec),
+        "targetMaxSec": 120,
     }
 
 
@@ -761,7 +855,7 @@ async def _run_ml_inference(assessment_id: str, user_id: str, audio_file_ids: li
                 job.stage = "Generating score report"
                 await db.commit()
 
-            raw_score = float(ml_result.get("phq8_score") or 0)
+            raw_score = float(ml_result.get("phq_total") or ml_result.get("phq8_score") or 0)
             ml_score = max(0.0, min(24.0, raw_score))
             total_score = int(round(ml_score))
             severity = normalize_severity_label(ml_result.get("severity"), ml_score)

@@ -142,11 +142,21 @@ export default function EnhancedDeviceCheck({ onReady }) {
    */
   const handleAlignmentReadiness = useCallback((ready) => {
     setFaceAlignmentReady(ready);
-    // CRITICAL: When alignment is lost, uncheck the patient ready checkbox
+    // CRITICAL: When alignment is lost OR integrity drops, uncheck the checkbox
     if (!ready) {
       setPatientReady(false);
     }
   }, []);
+
+  /**
+   * CRITICAL: Uncheck checkbox when integrity score drops below 80%
+   * This forces user to maintain proper face position throughout
+   */
+  useEffect(() => {
+    if (integrityScore <= 80 && patientReady) {
+      setPatientReady(false);
+    }
+  }, [integrityScore, patientReady]);
 
   /**
    * Handle integrity metrics from face monitor
@@ -160,7 +170,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
    * Calculate overall readiness
    */
   const audioReady = micOk === true && micLevel > 0.01;
-  const videoReady = !enableVideo || (camOk === true && faceAlignmentReady);
+  const videoReady = !enableVideo || (camOk === true && faceAlignmentReady && integrityScore > 80);
   const allGood = audioReady && videoReady && privacyAccepted;
 
   /**
@@ -173,7 +183,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
         ['Voice level detected', audioReady],
         ['Camera permission', camOk === true],
         ['Face continuously aligned', faceAlignmentReady],
-        ['Integrity score > 70%', integrityScore > 70],
+        ['Integrity score > 80%', integrityScore > 80],
         ['Patient confirmed readiness', patientReady],
         ['Consent acknowledged', privacyAccepted],
         ['Stable lighting & quiet room', true],
@@ -267,12 +277,18 @@ export default function EnhancedDeviceCheck({ onReady }) {
                 {/* REAL-TIME ALIGNMENT STATUS - PROMINENTLY DISPLAYED */}
                 <div
                   className={`p-3 rounded-lg font-bold text-center transition-all duration-200 ${
-                    faceAlignmentReady
+                    faceAlignmentReady && integrityScore > 80
                       ? 'bg-green-100 text-green-700 border border-green-300'
-                      : 'bg-red-100 text-red-700 border border-red-300'
+                      : faceAlignmentReady
+                        ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                        : 'bg-red-100 text-red-700 border border-red-300'
                   }`}
                 >
-                  {faceAlignmentReady ? '✓ ALIGNED - Ready' : '✗ NOT ALIGNED - Move face back'}
+                  {faceAlignmentReady && integrityScore > 80
+                    ? '✓ ALIGNED - Ready'
+                    : faceAlignmentReady
+                      ? `⚠ NEED 80% INTEGRITY (Current: ${Math.round(integrityScore)}%)`
+                      : '✗ NO FACE DETECTED - Show your face'}
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
@@ -281,7 +297,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
                   </span>
                   <span
                     className={`text-lg font-bold ${
-                      integrityScore > 70
+                      integrityScore > 80
                         ? 'text-green-600'
                         : integrityScore > 50
                         ? 'text-yellow-600'
@@ -315,21 +331,33 @@ export default function EnhancedDeviceCheck({ onReady }) {
                 {/* Readiness Confirmation */}
                 <label
                   className={`flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                    faceAlignmentReady
+                    faceAlignmentReady && integrityScore > 80
                       ? 'border-[#B7E4C7] bg-[#F3FBF7] cursor-pointer'
                       : 'border-[#E8E8E8] bg-[#FAFAF7] opacity-50 cursor-not-allowed'
                   }`}
                 >
                   <input
                     type="checkbox"
-                    checked={patientReady && faceAlignmentReady}
-                    onChange={(e) => setPatientReady(faceAlignmentReady && e.target.checked)}
-                    disabled={!faceAlignmentReady}
+                    checked={patientReady && faceAlignmentReady && integrityScore > 80}
+                    onChange={(e) => setPatientReady(faceAlignmentReady && integrityScore > 80 && e.target.checked)}
+                    disabled={!faceAlignmentReady || integrityScore <= 80}
                     className="mt-1 h-4 w-4 accent-[#2D6A4F]"
                   />
-                  <span className="text-sm text-[#4A5550]">
-                    My face is properly aligned and I'm ready to continue
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm text-[#4A5550]">
+                      My face is properly aligned and I'm ready to continue
+                    </span>
+                    {faceAlignmentReady && integrityScore <= 80 && (
+                      <span className="text-xs text-red-500 mt-1">
+                        Need 80% integrity to continue (current: {Math.round(integrityScore)}%)
+                      </span>
+                    )}
+                    {!faceAlignmentReady && (
+                      <span className="text-xs text-red-500 mt-1">
+                        Face not detected — show your face to camera
+                      </span>
+                    )}
+                  </div>
                 </label>
               </div>
             </Card>

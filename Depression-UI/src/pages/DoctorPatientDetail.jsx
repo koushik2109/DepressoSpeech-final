@@ -290,7 +290,7 @@ export default function DoctorPatientDetail() {
             value={
               metrics.latestScore != null ? `${metrics.latestScore}/24` : "—"
             }
-            hint={metrics.latestSeverity || "Current severity"}
+            hint={metrics.latestSeverity || "No severity data"}
           />
           <Metric
             label="Improvement"

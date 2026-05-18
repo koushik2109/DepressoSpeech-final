@@ -169,11 +169,11 @@ export default function Consultation() {
                   <div className="rounded-lg bg-[#FAFAF7] p-4 space-y-2 text-sm">
                     <p>
                       <span className="font-semibold text-[#4C5852]">Score:</span>{" "}
-                      {consultation.assessment.score}/24
+                      {consultation.assessment.score != null ? consultation.assessment.score : '—'}/24
                     </p>
                     <p>
                       <span className="font-semibold text-[#4C5852]">Severity:</span>{" "}
-                      {consultation.assessment.severity}
+                      {consultation.assessment.severity || 'Not assessed'}
                     </p>
                     <p>
                       <span className="font-semibold text-[#4C5852]">Date:</span>{" "}

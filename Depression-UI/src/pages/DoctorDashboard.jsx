@@ -415,8 +415,8 @@ export default function DoctorDashboard() {
                       </p>
                       {assignment.assessment && (
                         <p className="text-xs text-[#9AA49F]">
-                          Score {assignment.assessment.score}/24 ·{" "}
-                          {assignment.assessment.severity}
+                          Score {assignment.assessment.score != null ? assignment.assessment.score : '—'}/24 ·{" "}
+                          {assignment.assessment.severity || 'No severity'}
                         </p>
                       )}
                     </div>

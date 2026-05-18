@@ -1,92 +1,29 @@
-"""
-[LAYER_START] Session 7: Training Metrics
-CCC (primary), RMSE, MAE for depression severity evaluation.
-
-[TRAINING PATH] Computed per epoch on train and validation sets.
-"""
-
-import torch
 import numpy as np
-import logging
-from typing import Dict
-
-logger = logging.getLogger(__name__)
+from sklearn.metrics import mean_squared_error, mean_absolute_error, f1_score, roc_auc_score
 
 
-def concordance_correlation_coefficient(
-    predictions: np.ndarray,
-    targets: np.ndarray,
-) -> float:
-    """
-    Concordance Correlation Coefficient (CCC).
-
-    Measures agreement between predicted and true PHQ-8 scores.
-    Range: [-1, 1]. 1 = perfect agreement.
-
-    CCC = (2 * rho * sigma_p * sigma_t) /
-          (sigma_p^2 + sigma_t^2 + (mu_p - mu_t)^2)
-
-    Args:
-        predictions: (N,) predicted PHQ-8 scores
-        targets: (N,) ground truth PHQ-8 scores
-
-    Returns:
-        CCC value (float)
-    """
-    if len(predictions) < 2:
-        return 0.0
-
-    mu_p = predictions.mean()
-    mu_t = targets.mean()
-    sigma_p = predictions.std(ddof=0)
-    sigma_t = targets.std(ddof=0)
-
-    if sigma_p < 1e-8 and sigma_t < 1e-8:
-        return 1.0 if np.abs(mu_p - mu_t) < 1e-8 else 0.0
-
-    covariance = np.mean((predictions - mu_p) * (targets - mu_t))
-
-    denominator = sigma_p**2 + sigma_t**2 + (mu_p - mu_t)**2
-    if denominator < 1e-8:
-        return 0.0
-
-    ccc = (2 * covariance) / denominator
-    return float(ccc)
+def concordance_correlation_coefficient(y_true: np.ndarray, y_pred: np.ndarray, epsilon: float = 1e-8) -> float:
+    true_mean = np.mean(y_true)
+    pred_mean = np.mean(y_pred)
+    covariance = np.mean((y_true - true_mean) * (y_pred - pred_mean))
+    true_var = np.var(y_true)
+    pred_var = np.var(y_pred)
+    return (2 * covariance) / (true_var + pred_var + (true_mean - pred_mean) ** 2 + epsilon)
 
 
-def root_mean_squared_error(
-    predictions: np.ndarray,
-    targets: np.ndarray,
-) -> float:
-    """RMSE between predicted and true PHQ-8 scores."""
-    return float(np.sqrt(np.mean((predictions - targets) ** 2)))
-
-
-def mean_absolute_error(
-    predictions: np.ndarray,
-    targets: np.ndarray,
-) -> float:
-    """MAE between predicted and true PHQ-8 scores."""
-    return float(np.mean(np.abs(predictions - targets)))
-
-
-def compute_all_metrics(
-    predictions: np.ndarray,
-    targets: np.ndarray,
-) -> Dict[str, float]:
-    """
-    Compute all evaluation metrics.
-
-    Args:
-        predictions: (N,) predicted PHQ-8 scores
-        targets: (N,) ground truth PHQ-8 scores
-
-    Returns:
-        Dict with keys: 'ccc', 'rmse', 'mae'
-    """
-    metrics = {
-        'ccc': concordance_correlation_coefficient(predictions, targets),
-        'rmse': root_mean_squared_error(predictions, targets),
-        'mae': mean_absolute_error(predictions, targets),
+def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    return {
+        "ccc": float(concordance_correlation_coefficient(y_true, y_pred)),
+        "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
+        "mae": float(mean_absolute_error(y_true, y_pred)),
     }
-    return metrics
+
+
+def classification_metrics(y_true: np.ndarray, y_pred_probs: np.ndarray) -> dict[str, float]:
+    binary = (y_true >= 10).astype(int)
+    preds = (y_pred_probs >= 0.5).astype(int)
+    auc = roc_auc_score(binary, y_pred_probs) if len(np.unique(binary)) > 1 else 0.5
+    return {
+        "f1": float(f1_score(binary, preds, zero_division=0)),
+        "roc_auc": float(auc),
+    }

@@ -236,7 +236,7 @@ async def assign_doctor(
         select(DoctorAssignment).where(
             DoctorAssignment.doctor_id == doctor.id,
             DoctorAssignment.patient_id == user.id,
-            DoctorAssignment.status.in_(["pending", "accepted"]),
+            DoctorAssignment.status.in_(["pending", "assigned", "accepted"]),
         )
     )).scalar_one_or_none()
     if existing:
@@ -299,7 +299,11 @@ async def doctor_assignments(
     doctor = await _get_current_doctor(db, user)
     query = select(DoctorAssignment).where(DoctorAssignment.doctor_id == doctor.id)
     if status:
-        query = query.where(DoctorAssignment.status == status)
+        # Treat legacy 'assigned' status as equivalent to 'pending' for queue display
+        if status == "pending":
+            query = query.where(DoctorAssignment.status.in_(["pending", "assigned"]))
+        else:
+            query = query.where(DoctorAssignment.status == status)
 
     assignments = (await db.execute(
         query.order_by(desc(DoctorAssignment.created_at))
@@ -354,7 +358,7 @@ async def update_assignment_status(
     if body.action == "accept":
         if assignment.status == "accepted":
             return {"assignment": _assignment_payload(assignment, patient, assessment, doctor)}
-        if assignment.status != "pending":
+        if assignment.status not in ("pending", "assigned"):
             raise HTTPException(status_code=409, detail="Assignment already handled.")
         assignment.status = "accepted"
         

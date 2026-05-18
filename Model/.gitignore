@@ -1,14 +1,46 @@
 .venv
 .env
-data/raw
-# data/features
-# data/splits
-# data/features_v2
-# logs
-# checkpoints
-# docs
-# ML_AUDIT_REPORT.txt
-# MULTIMODAL_FIX_REPORT.txt
-# Depression Severity Prediction Design Document.pdf
-# Depression Severity Prediction Prd (audio + Text, E Ge Maps + Mfcc, Mlp+lstm).pdf
 .codex
+
+# Training dataset (managed by root .gitignore too)
+data/raw
+data/features
+data/features_v2
+data/splits
+data/npz
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/labels.csv
+
+# Training logs & run artifacts
+logs/
+logs_v*/
+logs_v4_run.log
+runs/
+train_pid.txt
+
+# Large archives
+Model.zip
+*.tar.gz
+
+# Old / backup checkpoints — keep best_model.pt + multimodal_v4
+checkpoints/cv/
+checkpoints/multimodal_v2/
+checkpoints/multimodal_v3/
+checkpoints/best_fusion.pt
+checkpoints/best_model_backup*.pt
+checkpoints/best_stage*.pt
+checkpoints/best_trimodal*.pt
+checkpoints/best_trimodal_backup.pt
+checkpoints/best_trimodal_text.pt
+checkpoints/pca_cnn_transform.pkl
+checkpoints/scalers/
+
+# Docs
+docs/
+ML_AUDIT_REPORT.txt
+MULTIMODAL_FIX_REPORT.txt
+result.json
+Depression Severity Prediction Design Document.pdf
+Depression Severity Prediction Prd (audio + Text, E Ge Maps + Mfcc, Mlp+lstm).pdf

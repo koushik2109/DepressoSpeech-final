@@ -137,8 +137,8 @@ export default function ConsultationHistory() {
 
                     {consultation.assessment && (
                       <div className="mt-3 pt-3 border-t border-[#E8E8E8]">
-                        <p className="text-xs font-semibold text-[#4C5852] mb-2">
-                          Assessment Score: {consultation.assessment.score}/24 ({consultation.assessment.severity})
+                        <p className="text-xs font-semibold text-[#4C5550] mb-2">
+                          Assessment Score: {consultation.assessment.score != null ? consultation.assessment.score : '—'}/24 ({consultation.assessment.severity || 'No severity'})
                         </p>
                       </div>
                     )}

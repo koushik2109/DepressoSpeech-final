@@ -1,37 +1,76 @@
-# Python cache
+# ── Python cache ──────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
 
-# Virtual environment
+# ── Virtual environments ───────────────────────────────────────
 venv/
 .venv/
 
-# Dataset (do not commit)
-data/raw/
-data/processed/
-data/cached_features/
-
-# Training outputs
-checkpoints/
-logs/
-
-# OS junk
+# ── IDE / OS ───────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Backend
-backend/mindscope.db
-backend/uploads/
-backend/storage/audio
-# Frontend
-Depression-UI/node_modules/
-Depression-UI/dist/
-
-# IDE
 .vscode/
+state-backup.vscdb
+*.vscdb
 
-# Env files
+# ── Environment / secrets (never commit) ──────────────────────
 .env
 backend/.env
 Model/.env
 Depression-UI/.env
+
+# ── Frontend build & deps ─────────────────────────────────────
+Depression-UI/node_modules/
+Depression-UI/dist/
+
+# ── Backend runtime files ─────────────────────────────────────
+backend/mindscope.db
+backend/uploads/
+backend/storage/
+storage/
+
+# ── Model: large training dataset (96 GB) ─────────────────────
+Model/data/raw/
+Model/data/features/
+Model/data/features_v2/
+Model/data/splits/
+Model/data/npz/
+Model/data/*.db
+Model/data/*.db-shm
+Model/data/*.db-wal
+Model/data/labels.csv
+
+# ── Model: training logs & run artifacts ──────────────────────
+Model/logs/
+Model/logs_v*/
+Model/logs_v4_run.log
+Model/runs/
+Model/train_pid.txt
+
+# ── Model: large zip / archives ───────────────────────────────
+Model/Model.zip
+Model/*.tar.gz
+
+# ── Model: old / backup checkpoints (keep best_model.pt + v4) ─
+Model/checkpoints/cv/
+Model/checkpoints/multimodal_v2/
+Model/checkpoints/multimodal_v3/
+Model/checkpoints/best_fusion.pt
+Model/checkpoints/best_model_backup*.pt
+Model/checkpoints/best_stage*.pt
+Model/checkpoints/best_trimodal*.pt
+Model/checkpoints/best_trimodal_backup.pt
+Model/checkpoints/best_trimodal_text.pt
+Model/checkpoints/pca_cnn_transform.pkl
+Model/checkpoints/scalers/
+
+# ── Generated documents / reports ─────────────────────────────
+/documents/
+BACKEND_BLUEPRINT.pdf
+CODEBASE_ANALYSIS.md
+CODEBASE_EXPLORATION_SUMMARY.md
+COMPREHENSIVE_QA_GUIDE.md
+Model/ML_AUDIT_REPORT.txt
+Model/MULTIMODAL_FIX_REPORT.txt
+Model/result.json

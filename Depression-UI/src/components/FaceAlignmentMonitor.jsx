@@ -350,8 +350,8 @@ const FaceAlignmentMonitor = ({
     ctx.font = 'bold 13px Inter, Arial, sans-serif';
     ctx.textAlign = 'center';
 
-    const icon = faceDetected ? '✓' : '○';
-    const message = stateInfo.message || (faceDetected ? 'Face detected' : 'Show your face');
+    const icon = faceDetected ? '✓' : '✕';
+    const message = stateInfo.message || (faceDetected ? 'Face detected' : 'No face detected');
     ctx.fillText(`${icon}  ${message}`, width / 2, height - 12);
   };
 
@@ -386,12 +386,12 @@ const FaceAlignmentMonitor = ({
           }} />
           <span style={{
             ...styles.statusText,
-            color: isReady ? '#2E7D32' : '#777',
+            color: isReady ? '#2E7D32' : (currentState === 'INITIALIZING' ? '#F44336' : '#777'),
           }}>
-            {currentState === 'INITIALIZING'
-              ? 'Looking for your face...'
-              : isReady
-                ? 'Face detected — ready to record'
+            {isReady
+              ? 'Face detected — ready to record'
+              : currentState === 'INITIALIZING'
+                ? 'No face detected — show your face'
                 : 'Checking...'
             }
           </span>

@@ -11,3 +11,23 @@ python-multipart>=0.0.9
 google-auth>=2.29
 requests>=2.31
 httpx>=0.27
+
+# ── Audio / video feature extraction ──────────────────────────
+numpy>=1.24
+librosa>=0.10
+soundfile>=0.12          # required by librosa for wav I/O
+
+# ── Database drivers ───────────────────────────────────────────
+# SQLite (default dev):  aiosqlite (already listed above)
+# PostgreSQL (prod):     asyncpg + psycopg2 (choose one async driver)
+asyncpg>=0.29            # async PostgreSQL driver for SQLAlchemy
+
+# ── S3 object storage (only when STORAGE_PROVIDER=s3) ─────────
+boto3>=1.34
+
+# ── Optional heavy ML deps (install if available) ─────────────
+# opensmile>=2.5          # eGeMAPS feature extraction (falls back to librosa if missing)
+# mediapipe>=0.10         # face mesh / AU features  (falls back to zeros if missing)
+# opencv-python>=4.8      # frame reading for MediaPipe
+# openai-whisper>=20231117  # speech-to-text         (skipped if missing)
+# torch>=2.0              # CNN embeddings via ResNet50

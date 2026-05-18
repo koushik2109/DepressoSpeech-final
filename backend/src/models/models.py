@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
+    LargeBinary,
     String,
     Integer,
     SmallInteger,
@@ -211,6 +212,26 @@ class MediaFile(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     owner = relationship("User", back_populates="media_files")
+    file_data = relationship("MediaFileData", back_populates="media_file", uselist=False, cascade="all, delete-orphan")
+
+
+# ── Media File Binary Data (BYTEA / PostgreSQL file storage) ──
+
+class MediaFileData(Base):
+    """Stores raw audio/video bytes inside the database.
+
+    One row per file — kept in a separate table so that metadata queries
+    on media_files (listing, status checks) never load the binary payload.
+
+    Used when STORAGE_PROVIDER=postgres.  The storage_key on the parent
+    MediaFile row is set to 'db:<file_id>' to signal DB storage.
+    """
+    __tablename__ = "media_file_data"
+
+    file_id = Column(String(36), ForeignKey("media_files.id", ondelete="CASCADE"), primary_key=True)
+    data = Column(LargeBinary, nullable=False)
+
+    media_file = relationship("MediaFile", back_populates="file_data")
 
 
 # ── Assessment ML Details ─────────────────────────────
@@ -257,7 +278,8 @@ class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
     id = Column(String(36), primary_key=True, default=_uuid)
-    assessment_id = Column(String(36), ForeignKey("assessments.id"), nullable=False, index=True)
+    # Plain string — no FK so it can reference assessments OR multimodal_sessions
+    assessment_id = Column(String(36), nullable=True, index=True)
     job_type = Column(String(32), default="inference")
     status = Column(String(16), default="queued")  # queued | running | succeeded | failed
     progress_pct = Column(SmallInteger, default=0)
@@ -266,5 +288,3 @@ class ProcessingJob(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
-
-    assessment = relationship("Assessment", lazy="selectin")

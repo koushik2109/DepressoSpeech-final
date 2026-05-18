@@ -1,0 +1,74 @@
+services:
+  # ── Backend (FastAPI) ─────────────────────────────────────────────────────
+  - type: web
+    name: mindscope-backend
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mindscope-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      - key: JWT_REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: CORS_ORIGINS
+        value: '["https://YOUR_VERCEL_URL.vercel.app"]'
+      - key: STORAGE_PROVIDER
+        value: s3
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: ML_MODEL_URL
+        value: https://YOUR_ML_SERVER.onrender.com
+      - key: ADMIN_DEFAULT_EMAIL
+        value: admin@mindscope.ai
+      - key: ADMIN_DEFAULT_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+
+  # ── ML Model Server (FastAPI + PyTorch) ───────────────────────────────────
+  - type: web
+    name: mindscope-ml
+    runtime: docker
+    plan: standard
+    rootDir: Model
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8001"
+      - key: ML_DEVICE
+        value: cpu
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────
+databases:
+  - name: mindscope-db
+    databaseName: mindscope
+    user: mindscope
+    plan: free

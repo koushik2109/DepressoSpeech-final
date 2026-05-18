@@ -1,0 +1,32 @@
+{
+  "audio": {
+    "name": "audio",
+    "expected_dim": 62,
+    "temporal": true,
+    "preprocessor_class": null,
+    "extractor_class": null,
+    "pca_enabled": false,
+    "pca_target_dim": null,
+    "normalizer_type": "standard"
+  },
+  "video": {
+    "name": "video",
+    "expected_dim": 49,
+    "temporal": true,
+    "preprocessor_class": null,
+    "extractor_class": null,
+    "pca_enabled": false,
+    "pca_target_dim": null,
+    "normalizer_type": "standard"
+  },
+  "text": {
+    "name": "text",
+    "expected_dim": 384,
+    "temporal": true,
+    "preprocessor_class": null,
+    "extractor_class": null,
+    "pca_enabled": false,
+    "pca_target_dim": null,
+    "normalizer_type": "standard"
+  }
+}
