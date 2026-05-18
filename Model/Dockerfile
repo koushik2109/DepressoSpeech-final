@@ -16,16 +16,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# Pin numpy<2 first — torch 2.x compiled modules crash with numpy>=2
-RUN pip install --no-cache-dir "numpy>=1.24.4,<2"
-
-# Install CPU-only torch (2.4.1 — minimum required by sentence-transformers/transformers)
+# Install CPU-only torch — latest from wheel index (no version pin)
+# Same approach as start-all.sh: installs latest compatible cpu set
 RUN pip install --no-cache-dir \
-    torch==2.4.1+cpu \
-    torchaudio==2.4.1+cpu \
+    torch torchaudio torchvision \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install remaining deps (numpy already pinned, won't be upgraded)
+# Install remaining deps (torch already satisfied above, won't re-download)
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
