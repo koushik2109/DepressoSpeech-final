@@ -14,7 +14,9 @@ from src.dataset.collate import multimodal_collate_fn
 
 class ModelV2Inferencer:
     def __init__(self, checkpoint_path: Path, model_config: Dict[str, Any], device: str = "auto"):
-        self.device = torch.device("cuda" if device == "auto" and torch.cuda.is_available() else device)
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device(device)
         self.model = MultimodalDepressionModel(**model_config)
         load_checkpoint(self.model, checkpoint_path, device=str(self.device))
         self.model.to(self.device).eval()
