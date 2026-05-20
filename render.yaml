@@ -18,7 +18,7 @@ services:
           name: mindscope-db
           property: connectionString
       - key: JWT_SECRET_KEY
-        generateValue: true
+        sync: false
       - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         value: "480"
       - key: JWT_REFRESH_TOKEN_EXPIRE_DAYS

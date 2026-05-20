@@ -119,6 +119,12 @@ async function apiFetch(path, options = {}) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          sessionStore?.removeItem(SESSION_KEY);
+          sessionStore?.removeItem(ADMIN_SESSION_KEY);
+          notifySessionChange();
+          throw new Error("Your session has expired. Please log in again.");
+        }
         throw new Error(body.detail || `Request failed (${res.status})`);
       }
       if (res.status === 204) return null;
@@ -594,6 +600,12 @@ export async function uploadAudio(blob, filename = "recording.webm") {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      sessionStore?.removeItem(SESSION_KEY);
+      sessionStore?.removeItem(ADMIN_SESSION_KEY);
+      notifySessionChange();
+      throw new Error("Your session has expired. Please log in again and retry.");
+    }
     throw new Error(body.detail || `Upload failed (${res.status})`);
   }
   return res.json();
