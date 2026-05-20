@@ -368,10 +368,8 @@ async def score_question_audio(
     user: User = Depends(require_patient),
     db: AsyncSession = Depends(get_db),
 ):
-    from pathlib import Path
-    from config.settings import get_settings
+    from src.services.storage_service import get_storage_service
 
-    settings = get_settings()
     media = (await db.execute(
         select(MediaFile).where(
             MediaFile.id == body.audioFileId,
@@ -381,20 +379,25 @@ async def score_question_audio(
     if not media:
         raise HTTPException(status_code=404, detail="Audio file not found")
 
-    audio_path = Path(settings.STORAGE_LOCAL_PATH) / media.storage_key
-    if not audio_path.exists():
-        raise HTTPException(status_code=404, detail="Audio file missing from storage")
+    try:
+        storage = get_storage_service()
+        audio_content = await storage.read_bytes(media.storage_key)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Audio file missing from storage") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read audio file: {exc}") from exc
 
     client = MLClient()
     try:
         ml_result = await client.predict_extended(
-            audio_path=str(audio_path),
+            audio_content=audio_content,
             participant_id=user.id,
+            filename=media.original_filename or "audio.webm",
         )
     except Exception as exc:
         message = str(exc)
         logger.error(f"[ML] Question scoring failed for user={user.id}, q={body.questionId}: {message}")
-        if "No usable audio chunks" in message or "No speech detected" in message:
+        if "too short" in message or "No usable audio chunks" in message or "No speech detected" in message:
             raise HTTPException(
                 status_code=422,
                 detail="No clear speech detected in this recording. Please re-record and speak clearly for at least a few seconds.",
@@ -747,10 +750,6 @@ async def processing_status(
 
 async def _run_ml_inference(assessment_id: str, user_id: str, audio_file_ids: list):
     """Background task: find audio files, send to ML model, store results."""
-    from pathlib import Path
-    from config.settings import get_settings
-
-    settings = get_settings()
     client = MLClient()
 
     try:
@@ -816,10 +815,12 @@ async def _run_ml_inference(assessment_id: str, user_id: str, audio_file_ids: li
                     media.created_at.timestamp() if media.created_at else 0,
                 ),
             )
-            audio_path = Path(settings.STORAGE_LOCAL_PATH) / audio_file.storage_key
-
-            if not audio_path.exists():
-                logger.error(f"[ML] Audio file not found on disk: {audio_path}")
+            from src.services.storage_service import get_storage_service
+            try:
+                storage = get_storage_service()
+                audio_content = await storage.read_bytes(audio_file.storage_key)
+            except Exception as read_exc:
+                logger.error(f"[ML] Cannot read audio bytes for {audio_file.id}: {read_exc}")
                 assessment.status = "failed"
                 if job:
                     job.status = "failed"
@@ -836,8 +837,9 @@ async def _run_ml_inference(assessment_id: str, user_id: str, audio_file_ids: li
 
             ml_task = asyncio.create_task(
                 client.predict_extended(
-                    audio_path=str(audio_path),
+                    audio_content=audio_content,
                     participant_id=user_id,
+                    filename=audio_file.original_filename or "audio.webm",
                 )
             )
             while not ml_task.done():

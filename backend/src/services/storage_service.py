@@ -47,6 +47,10 @@ class StorageService(ABC):
         """Remove a previously saved file (best-effort; no error on missing)."""
 
     @abstractmethod
+    async def read_bytes(self, storage_key: str) -> bytes:
+        """Return the raw bytes of a stored file (raises if missing)."""
+
+    @abstractmethod
     def exists(self, storage_key: str) -> bool:
         """Return True if the file can be served."""
 
@@ -81,6 +85,13 @@ class LocalStorageService(StorageService):
             self._path(storage_key).unlink(missing_ok=True)
         except Exception as exc:
             logger.warning("LocalStorage delete failed for %s: %s", storage_key, exc)
+
+    async def read_bytes(self, storage_key: str) -> bytes:
+        file_path = self._path(storage_key)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Local file not found: {file_path}")
+        async with aiofiles.open(file_path, "rb") as fh:
+            return await fh.read()
 
     def exists(self, storage_key: str) -> bool:
         return self._path(storage_key).exists()
@@ -168,6 +179,15 @@ class S3StorageService(StorageService):
         except Exception as exc:
             logger.warning("S3Storage delete failed for %s: %s", s3_key, exc)
 
+    async def read_bytes(self, storage_key: str) -> bytes:
+        s3_key = self._key(storage_key)
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self._s3.get_object(Bucket=self._bucket, Key=s3_key),
+        )
+        return response["Body"].read()
+
     def exists(self, storage_key: str) -> bool:
         try:
             self._s3.head_object(Bucket=self._bucket, Key=self._key(storage_key))
@@ -247,6 +267,18 @@ class PostgreSQLStorageService(StorageService):
             if row:
                 await db.delete(row)
                 await db.commit()
+
+    async def read_bytes(self, storage_key: str) -> bytes:
+        """Read raw bytes from the database BYTEA column."""
+        from database.base import async_session_factory
+        from src.models import MediaFileData
+
+        fid = self._file_id_from_key(storage_key)
+        async with async_session_factory() as db:
+            row = await db.get(MediaFileData, fid)
+        if row is None:
+            raise FileNotFoundError(f"File not found in database: {storage_key}")
+        return bytes(row.data)
 
     def exists(self, storage_key: str) -> bool:
         """Synchronous existence check — not usable for async DB; always True for DB keys."""

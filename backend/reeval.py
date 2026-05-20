@@ -135,7 +135,7 @@ async def main():
               f"video:{video_arr.shape if video_arr is not None else None}  "
               f"text:{text_arr.shape if text_arr is not None else None}")
 
-        ml_url = (settings.ML_MODEL_URL or "http://localhost:8001").rstrip("/")
+        ml_url = settings.ML_MODEL_URL.rstrip("/")
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(f"{ml_url}/predict/multimodal", json=payload)
             resp.raise_for_status()

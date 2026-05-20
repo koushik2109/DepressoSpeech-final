@@ -68,7 +68,7 @@ class MLClient:
     """Communicates with the ML model API (Hugging Face Space).
 
     Supports:
-        - predict_extended: Per-question audio scoring → POST /predict/audio/raw
+        - predict_extended: Per-question audio scoring → POST /predict/audio
         - predict_multimodal: Trimodal inference → POST /predict/multimodal
         - health_check: Service liveness → GET /health
     """
@@ -77,54 +77,100 @@ class MLClient:
         self.base_url = (base_url or settings.ML_MODEL_URL).rstrip("/")
         self.timeout = timeout
 
-    async def predict_extended(self, audio_path: str, participant_id: str = "unknown") -> dict:
-        """POST raw audio to /predict/audio/raw and return parsed JSON.
+    @staticmethod
+    def _extract_mfcc_features(audio_bytes: bytes, filename: str = "audio.webm") -> list:
+        """Extract 39-dim MFCC+delta+delta2 features from raw audio bytes.
 
-        The HF Space endpoint extracts MFCC features internally and runs inference.
-        Replaces the old /predict/extended endpoint which no longer exists.
+        The HF Space /predict/audio preprocessor expects this exact format:
+        shape (T, 39) where T is the number of analysis frames.
+        Server-side normalizer+PCA reduces 39→33 dims before inference.
         """
-        url = f"{self.base_url}/predict/audio/raw"
-        filename = Path(audio_path).name
-        logger.info("[ML] → POST %s (file=%s)", url, filename)
+        import os
+        import tempfile
+        import numpy as np
+        import librosa
+
+        suffix = Path(filename).suffix.lower() or ".webm"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        try:
+            y, sr = librosa.load(tmp_path, sr=16000, mono=True)
+        finally:
+            os.unlink(tmp_path)
+
+        if len(y) < sr * 0.5:
+            raise RuntimeError(
+                "Audio too short for feature extraction (< 0.5 s). "
+                "Please re-record and speak for at least a few seconds."
+            )
+
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, hop_length=512)
+        delta = librosa.feature.delta(mfcc)
+        delta2 = librosa.feature.delta(mfcc, order=2)
+        features = np.concatenate([mfcc, delta, delta2], axis=0).T  # (T, 39)
+        features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        return features.tolist()
+
+    async def predict_extended(
+        self,
+        audio_content: bytes,
+        participant_id: str = "unknown",
+        filename: str = "audio.webm",
+    ) -> dict:
+        """Extract MFCC features from raw audio bytes, POST JSON to /predict/audio.
+
+        Feature extraction (39-dim MFCC+delta+delta2) happens on the backend.
+        The HF Space /predict/audio endpoint applies normalizer+PCA (39→33)
+        and runs inference.  This endpoint has always existed on the HF Space,
+        unlike the /predict/audio/raw multipart endpoint.
+        """
+        url = f"{self.base_url}/predict/audio"
+        logger.info("[ML] extracting MFCC features from %s (%d bytes)", filename, len(audio_content))
         t0 = time.monotonic()
+
+        try:
+            features = self._extract_mfcc_features(audio_content, filename)
+        except Exception as exc:
+            logger.error("[ML] MFCC extraction failed for %s: %s", filename, exc)
+            raise RuntimeError(f"Audio feature extraction failed: {exc}") from exc
+
+        payload = {"audio_features": features, "participant_id": participant_id}
+        logger.info(
+            "[ML] → POST %s (frames=%d, dims=%d)",
+            url, len(features), len(features[0]) if features else 0,
+        )
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            with open(audio_path, "rb") as f:
-                try:
-                    resp = await client.post(
-                        url,
-                        files={"file": (filename, f, "application/octet-stream")},
-                        data={"participant_id": participant_id},
-                    )
-                except httpx.ConnectError as exc:
-                    logger.error("[ML] ConnectError → %s : %s", url, exc)
-                    raise RuntimeError(
-                        f"Cannot reach ML service at {self.base_url}. "
-                        "Check ML_MODEL_URL env var and that the HF Space is running."
-                    ) from exc
-                except httpx.TimeoutException as exc:
-                    logger.error("[ML] Timeout after %.0fs → %s", self.timeout, url)
-                    raise RuntimeError(
-                        f"ML service timed out after {self.timeout}s. "
-                        "The HF Space may be cold-starting; please retry in a moment."
-                    ) from exc
-            elapsed = time.monotonic() - t0
-            logger.info("[ML] ← status=%d in %.2fs", resp.status_code, elapsed)
-            if not resp.is_success:
-                body_preview = resp.text[:500]
-                logger.error("[ML] ← FAILED status=%d body=%s", resp.status_code, body_preview)
             try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                detail = None
-                try:
-                    detail = resp.json().get("detail")
-                except Exception:
-                    detail = resp.text[:300]
-                message = detail or str(exc)
+                resp = await client.post(url, json=payload)
+            except httpx.ConnectError as exc:
+                logger.error("[ML] ConnectError → %s : %s", url, exc)
                 raise RuntimeError(
-                    f"ML model API error ({resp.status_code}): {message}"
+                    f"Cannot reach ML service at {self.base_url}. "
+                    "Check ML_MODEL_URL env var and that the HF Space is running."
                 ) from exc
-            return resp.json()
+            except httpx.TimeoutException as exc:
+                logger.error("[ML] Timeout after %.0fs → %s", self.timeout, url)
+                raise RuntimeError(
+                    f"ML service timed out after {self.timeout}s. "
+                    "The HF Space may be cold-starting; please retry in a moment."
+                ) from exc
+
+        elapsed = time.monotonic() - t0
+        logger.info("[ML] ← status=%d in %.2fs", resp.status_code, elapsed)
+        if not resp.is_success:
+            logger.error("[ML] ← FAILED status=%d body=%s", resp.status_code, resp.text[:500])
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = None
+            try:
+                detail = resp.json().get("detail")
+            except Exception:
+                detail = resp.text[:300]
+            raise RuntimeError(f"ML model API error ({resp.status_code}): {detail or exc}") from exc
+        return resp.json()
 
     async def predict_multimodal(
         self,
@@ -200,17 +246,17 @@ class MLClient:
                     "[ML] ConnectError → %s : %s — check ML_MODEL_URL=%s",
                     url, exc, self.base_url,
                 )
-                logger.warning("ML service unreachable, running local inference fallback")
-                return await self._local_multimodal_fallback(
-                    audio_features, video_features, text_features, participant_id
-                )
+                raise RuntimeError(
+                    f"Cannot reach ML service at {self.base_url}. "
+                    "Check ML_MODEL_URL env var and that the HF Space is running."
+                ) from exc
             except httpx.TimeoutException as exc:
                 elapsed = time.monotonic() - t0
                 logger.error("[ML] Timeout after %.0fs → %s", elapsed, url)
-                logger.warning("ML service timed out (%.0fs), running local inference fallback", elapsed)
-                return await self._local_multimodal_fallback(
-                    audio_features, video_features, text_features, participant_id
-                )
+                raise RuntimeError(
+                    f"ML service timed out after {self.timeout}s. "
+                    "The HF Space may be cold-starting; please retry in a moment."
+                ) from exc
             except httpx.HTTPStatusError as exc:
                 elapsed = time.monotonic() - t0
                 detail = None
@@ -219,26 +265,16 @@ class MLClient:
                 except Exception:
                     detail = resp.text[:300]
                 message = detail or str(exc)
-                if resp.status_code in {500, 502, 503, 504}:
-                    logger.error(
-                        "[ML] ← server error %d in %.2fs: %s — falling back to local inference",
-                        resp.status_code, elapsed, message,
-                    )
-                    return await self._local_multimodal_fallback(
-                        audio_features, video_features, text_features, participant_id
-                    )
                 logger.error(
-                    "[ML] ← non-retriable error %d in %.2fs: %s",
+                    "[ML] ← error %d in %.2fs: %s",
                     resp.status_code, elapsed, message,
                 )
                 raise RuntimeError(
                     f"Multimodal ML API error ({resp.status_code}): {message}"
                 ) from exc
             except httpx.HTTPError as exc:
-                logger.error("[ML] HTTPError → %s : %s — falling back to local inference", url, exc)
-                return await self._local_multimodal_fallback(
-                    audio_features, video_features, text_features, participant_id
-                )
+                logger.error("[ML] HTTPError → %s : %s", url, exc)
+                raise RuntimeError(f"ML service HTTP error: {exc}") from exc
 
     @staticmethod
     def _sanitize_array(path: Path, *, replace_zeros: bool = False) -> list:
@@ -319,117 +355,6 @@ class MLClient:
         if text_path:
             return self._sanitize_array(text_path)
         return None
-
-    async def _local_multimodal_fallback(
-        self,
-        audio_features: Optional[Dict[str, Any]],
-        video_features: Optional[Dict[str, Any]],
-        text_features: Optional[Dict[str, Any]],
-        participant_id: str,
-    ) -> dict:
-        """Local fallback when ML service is unavailable.
-
-        Uses a simple heuristic-based scoring for demo purposes.
-        In production, this would load the model locally.
-        """
-        import numpy as np
-
-        modalities_used = []
-        contributions = {"audio": 0.0, "video": 0.0, "text": 0.0}
-        score = 0.0
-
-        storage_base = Path(settings.STORAGE_LOCAL_PATH).parent / "multimodal"
-
-        # Try loading and scoring each modality
-        if audio_features:
-            mfcc_key = audio_features.get("mfcc_key")
-            egemaps_key = audio_features.get("egemaps_key")
-            if mfcc_key and egemaps_key:
-                try:
-                    mfcc = np.loadtxt(str(storage_base / mfcc_key), delimiter=",", dtype=np.float32)
-                    egemaps = np.loadtxt(str(storage_base / egemaps_key), delimiter=",", dtype=np.float32)
-                    # Simple feature-based score estimate
-                    mfcc = np.nan_to_num(mfcc, nan=0.0, posinf=0.0, neginf=0.0)
-                    egemaps = np.nan_to_num(egemaps, nan=0.0, posinf=0.0, neginf=0.0)
-                    audio_var = np.mean(np.std(mfcc, axis=0)) + np.mean(np.std(egemaps, axis=0))
-                    audio_score = np.clip(audio_var * 3.0, 0, 24)
-                    behavioral_key = audio_features.get("behavioral_key")
-                    if behavioral_key:
-                        behavioral = np.loadtxt(str(storage_base / behavioral_key), delimiter=",", dtype=np.float32)
-                        behavioral = np.nan_to_num(behavioral.reshape(-1), nan=0.0, posinf=0.0, neginf=0.0)
-                        silence_ratio = float(np.clip(behavioral[3], 0.0, 1.0)) if behavioral.size > 3 else 0.0
-                        speaking_ratio = float(np.clip(behavioral[9], 0.0, 1.0)) if behavioral.size > 9 else max(0.0, 1.0 - silence_ratio)
-                        low_speech = max(0.0, 0.55 - speaking_ratio) / 0.55
-                        audio_score = np.clip(audio_score + 3.0 * low_speech, 0, 24)
-                    score += audio_score
-                    modalities_used.append("audio")
-                except Exception as e:
-                    logger.warning(f"Audio feature loading failed: {e}")
-
-        if video_features:
-            openface_key = video_features.get("openface_key")
-            cnn_key = video_features.get("cnn_key")
-            if openface_key and cnn_key:
-                try:
-                    openface = np.loadtxt(str(storage_base / openface_key), delimiter=",", dtype=np.float32)
-                    cnn = np.loadtxt(str(storage_base / cnn_key), delimiter=",", dtype=np.float32)
-                    if openface.ndim == 1:
-                        openface = openface.reshape(1, -1)
-                    if cnn.ndim == 1:
-                        cnn = cnn.reshape(1, -1)
-                    openface = np.nan_to_num(openface, nan=1e-6, posinf=1e-6, neginf=-1e-6)
-                    cnn = np.nan_to_num(cnn, nan=1e-6, posinf=1e-6, neginf=-1e-6)
-                    openface = np.where(openface == 0.0, 1e-6, openface)
-                    cnn = np.where(cnn == 0.0, 1e-6, cnn)
-                    video_var = np.mean(np.std(openface, axis=0)) + np.mean(np.std(cnn, axis=0))
-                    video_score = np.clip(video_var * 5.0, 0, 24)
-                    video_activity = float(np.mean(np.abs(openface)) + np.mean(np.abs(cnn))) if openface.size and cnn.size else 0.0
-                    if video_activity < 1e-5:
-                        video_score = max(video_score, 4.0)
-                    score += video_score
-                    modalities_used.append("video")
-                except Exception as e:
-                    logger.warning(f"Video feature loading failed: {e}")
-
-        if text_features:
-            text_key = text_features.get("text_key")
-            raw_text = text_features.get("raw_text")
-            if text_key:
-                try:
-                    text_emb = np.loadtxt(str(storage_base / text_key), delimiter=",", dtype=np.float32)
-                    text_var = np.mean(np.std(text_emb, axis=0))
-                    text_score = np.clip(text_var * 4.0, 0, 24)
-                    score += text_score
-                    modalities_used.append("text")
-                except Exception as e:
-                    logger.warning(f"Text feature loading failed: {e}")
-            elif raw_text:
-                # Simple text length heuristic
-                word_count = len(raw_text.split())
-                text_score = np.clip(word_count * 0.05, 0, 12)
-                score += text_score
-                modalities_used.append("text")
-
-        if modalities_used:
-            score = score / len(modalities_used)
-            equal_weight = round(1.0 / len(modalities_used), 4)
-            for modality in modalities_used:
-                contributions[modality] = equal_weight
-        score = float(np.clip(score, 0, 24))
-        confidence = len(modalities_used) / 3.0
-
-        return {
-            "phq8_score": round(score, 2),
-            "severity": self._severity_label(score),
-            "confidence": round(confidence, 2),
-            "modalities_used": modalities_used,
-            "modality_contributions": contributions,
-            "inference_time_s": 0.001,
-            "debug": {"mode": "local_fallback"},
-            "is_classification": False,
-            "depression_probability": None,
-            "predicted_label": None,
-        }
 
     @staticmethod
     def _severity_label(score: float) -> str:

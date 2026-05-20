@@ -28,7 +28,7 @@ services:
       - key: STORAGE_PROVIDER
         value: postgres
       - key: ML_MODEL_URL
-        value: https://koushik2109-mindscope-ml.hf.space
+        value: https://koushik2109-mindscope-model.hf.space
       - key: ADMIN_DEFAULT_EMAIL
         value: admin@mindscope.ai
       - key: ADMIN_DEFAULT_PASSWORD
