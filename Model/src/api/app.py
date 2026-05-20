@@ -23,7 +23,7 @@ async def _warmup_model() -> None:
         return
     try:
         dummy = {
-            "audio": [[0.0] * 24],
+            "audio": [[0.0] * 33],
             "audio_mask": [True],
         }
         inferencer.predict_single(dummy)
