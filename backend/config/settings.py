@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     ML_MODEL_PATH: str = "../ModelV2/checkpoints/best_model.pt"
     ML_CONFIG_PATH: str = "../ModelV2/configs/inference_config.yaml"
     ML_DEVICE: str = "auto"
-    ML_MODEL_URL: str = "http://localhost:8001"
+    ML_MODEL_URL: str = "https://koushik2109-mindscope-ml.hf.space"
 
     # Inference result cache
     ML_CACHE_TTL_SECONDS: int = 3600    # how long to keep cached predictions

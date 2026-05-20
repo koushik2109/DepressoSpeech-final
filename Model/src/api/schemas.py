@@ -20,6 +20,7 @@ class VideoPayload(BaseModel):
     video_path: Optional[str] = None
     openface_csv_path: Optional[str] = None
     video_frames: Optional[List[List[int]]] = None
+    video_features: Optional[List[List[float]]] = None
     metadata: Optional[dict] = None
 
 

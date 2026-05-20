@@ -1,10 +1,11 @@
 from typing import Optional, Dict, Any
 import hashlib
+import io
 import json
 import time
 import logging
 import numpy as np
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, File, Form, HTTPException, BackgroundTasks, UploadFile
 from src.api.schemas import AudioPayload, VideoPayload, TextPayload, MultimodalPayload, PredictionResponse, HealthResponse
 from src.features.text_features import TextFeatureExtractor
 from src.inference.inferencer import ModelV2Inferencer
@@ -222,4 +223,75 @@ async def predict_question(payload: MultimodalPayload) -> PredictionResponse:
     result.setdefault("metadata", {})
     result["processing_details"] = {"total_seconds": duration, "stages": {"inference": duration}}
     logger.info("predict_question finished: duration=%.3fs classification=%.4f", duration, result.get("classification"))
+    return PredictionResponse(**result)
+
+
+@router.post("/predict/audio/raw", response_model=PredictionResponse)
+async def predict_audio_raw(
+    file: UploadFile = File(...),
+    participant_id: str = Form("unknown"),
+) -> PredictionResponse:
+    """Accept a raw audio file upload, extract MFCC features with librosa, and run inference.
+
+    Used by the backend's predict_extended() call for per-question audio scoring.
+    Feature pipeline: MFCC(13) + delta + delta2 → [T, 39] → normalizer+PCA → [T, audio_dim].
+    """
+    if _inferencer is None:
+        raise HTTPException(status_code=503, detail="Inference model is not initialized.")
+
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file received.")
+
+    try:
+        import librosa
+        waveform, _ = librosa.load(io.BytesIO(audio_bytes), sr=16000, mono=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to decode audio: {exc}")
+
+    if len(waveform) < 320:
+        raise HTTPException(status_code=400, detail="Audio too short — need at least 20ms of audio.")
+
+    waveform = librosa.util.normalize(waveform)
+    mfcc   = librosa.feature.mfcc(y=waveform, sr=16000, n_mfcc=13)
+    delta  = librosa.feature.delta(mfcc)
+    delta2 = librosa.feature.delta(mfcc, order=2)
+    features = np.vstack([mfcc, delta, delta2]).T.astype(np.float32)  # [T, 39]
+    features = np.nan_to_num(features, nan=1e-6, posinf=1e-6, neginf=-1e-6)
+
+    audio_features = _apply_preprocessor(features.tolist(), "audio")
+
+    # Ensure output dim matches model's audio_input_dim regardless of preprocessor outcome
+    target_dim = _inferencer.model.audio_input_dim
+    arr = np.array(audio_features, dtype=np.float32)
+    if arr.shape[-1] != target_dim:
+        logger.warning(
+            "predict_audio_raw: dim mismatch after preprocessing — got %d, expected %d; adjusting",
+            arr.shape[-1], target_dim,
+        )
+        if arr.shape[-1] > target_dim:
+            arr = arr[:, :target_dim]
+        else:
+            pad = np.zeros((arr.shape[0], target_dim - arr.shape[-1]), dtype=np.float32)
+            arr = np.concatenate([arr, pad], axis=-1)
+        audio_features = arr.tolist()
+
+    start = time.perf_counter()
+    sample = {
+        "audio": audio_features,
+        "audio_mask": [True] * len(audio_features),
+    }
+    result = _inferencer.predict_single(sample)
+    duration = time.perf_counter() - start
+    result.setdefault("metadata", {})
+    result["processing_details"] = {
+        "total_seconds": duration,
+        "stages": {"inference": duration},
+        "participant_id": participant_id,
+        "audio_frames": len(audio_features),
+    }
+    logger.info(
+        "predict_audio_raw finished: frames=%d duration=%.3fs classification=%.4f confidence=%.4f",
+        len(audio_features), duration, result.get("classification"), result.get("confidence"),
+    )
     return PredictionResponse(**result)

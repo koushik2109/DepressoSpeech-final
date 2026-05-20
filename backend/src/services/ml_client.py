@@ -65,28 +65,53 @@ def clear_inference_cache() -> int:
 
 
 class MLClient:
-    """Communicates with the standalone ML model API.
+    """Communicates with the ML model API (Hugging Face Space).
 
     Supports:
-        - predict_extended: Original audio-only prediction
-        - predict_multimodal: New trimodal (audio+video+text) prediction
-        - health_check: Service health
+        - predict_extended: Per-question audio scoring → POST /predict/audio/raw
+        - predict_multimodal: Trimodal inference → POST /predict/multimodal
+        - health_check: Service liveness → GET /health
     """
 
-    def __init__(self, base_url: str | None = None, timeout: float = 120.0):
+    def __init__(self, base_url: str | None = None, timeout: float = 180.0):
         self.base_url = (base_url or settings.ML_MODEL_URL).rstrip("/")
         self.timeout = timeout
 
     async def predict_extended(self, audio_path: str, participant_id: str = "unknown") -> dict:
-        """POST multipart to /predict/extended and return parsed JSON."""
+        """POST raw audio to /predict/audio/raw and return parsed JSON.
+
+        The HF Space endpoint extracts MFCC features internally and runs inference.
+        Replaces the old /predict/extended endpoint which no longer exists.
+        """
+        url = f"{self.base_url}/predict/audio/raw"
+        filename = Path(audio_path).name
+        logger.info("[ML] → POST %s (file=%s)", url, filename)
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             with open(audio_path, "rb") as f:
-                filename = Path(audio_path).name
-                resp = await client.post(
-                    f"{self.base_url}/predict/extended",
-                    files={"file": (filename, f, "application/octet-stream")},
-                    params={"participant_id": participant_id},
-                )
+                try:
+                    resp = await client.post(
+                        url,
+                        files={"file": (filename, f, "application/octet-stream")},
+                        data={"participant_id": participant_id},
+                    )
+                except httpx.ConnectError as exc:
+                    logger.error("[ML] ConnectError → %s : %s", url, exc)
+                    raise RuntimeError(
+                        f"Cannot reach ML service at {self.base_url}. "
+                        "Check ML_MODEL_URL env var and that the HF Space is running."
+                    ) from exc
+                except httpx.TimeoutException as exc:
+                    logger.error("[ML] Timeout after %.0fs → %s", self.timeout, url)
+                    raise RuntimeError(
+                        f"ML service timed out after {self.timeout}s. "
+                        "The HF Space may be cold-starting; please retry in a moment."
+                    ) from exc
+            elapsed = time.monotonic() - t0
+            logger.info("[ML] ← status=%d in %.2fs", resp.status_code, elapsed)
+            if not resp.is_success:
+                body_preview = resp.text[:500]
+                logger.error("[ML] ← FAILED status=%d body=%s", resp.status_code, body_preview)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -94,10 +119,10 @@ class MLClient:
                 try:
                     detail = resp.json().get("detail")
                 except Exception:
-                    detail = resp.text
+                    detail = resp.text[:300]
                 message = detail or str(exc)
                 raise RuntimeError(
-                    f"Model API error ({resp.status_code}): {message}"
+                    f"ML model API error ({resp.status_code}): {message}"
                 ) from exc
             return resp.json()
 
@@ -152,48 +177,65 @@ class MLClient:
         if cached is not None:
             return cached
 
+        url = f"{self.base_url}/predict/multimodal"
+        modalities_present = [m for m in ("audio_features", "video_features", "text_features") if m in payload]
+        logger.info(
+            "[ML] → POST %s (session=%s, modalities=%s)",
+            url, payload.get("session_id", "?"), modalities_present,
+        )
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                resp = await client.post(
-                    f"{self.base_url}/predict/multimodal",
-                    json=payload,
-                )
+                resp = await client.post(url, json=payload)
+                elapsed = time.monotonic() - t0
+                logger.info("[ML] ← status=%d in %.2fs", resp.status_code, elapsed)
+                if not resp.is_success:
+                    logger.error("[ML] ← FAILED status=%d body=%s", resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 result = resp.json()
                 _cache_set(ck, result)
                 return result
-            except httpx.ConnectError:
-                # Fallback: run inference locally if ML service is unavailable
-                logger.warning("ML service unavailable, running local inference fallback")
+            except httpx.ConnectError as exc:
+                logger.error(
+                    "[ML] ConnectError → %s : %s — check ML_MODEL_URL=%s",
+                    url, exc, self.base_url,
+                )
+                logger.warning("ML service unreachable, running local inference fallback")
                 return await self._local_multimodal_fallback(
                     audio_features, video_features, text_features, participant_id
                 )
-            except httpx.TimeoutException:
-                logger.warning("ML service timed out, running local inference fallback")
+            except httpx.TimeoutException as exc:
+                elapsed = time.monotonic() - t0
+                logger.error("[ML] Timeout after %.0fs → %s", elapsed, url)
+                logger.warning("ML service timed out (%.0fs), running local inference fallback", elapsed)
                 return await self._local_multimodal_fallback(
                     audio_features, video_features, text_features, participant_id
                 )
             except httpx.HTTPStatusError as exc:
+                elapsed = time.monotonic() - t0
                 detail = None
                 try:
                     detail = resp.json().get("detail")
                 except Exception:
-                    detail = resp.text
+                    detail = resp.text[:300]
                 message = detail or str(exc)
-                if resp.status_code in {404, 500, 502, 503, 504}:
-                    logger.warning(
-                        "Multimodal API unavailable (%s: %s), running local inference fallback",
-                        resp.status_code,
-                        message,
+                if resp.status_code in {500, 502, 503, 504}:
+                    logger.error(
+                        "[ML] ← server error %d in %.2fs: %s — falling back to local inference",
+                        resp.status_code, elapsed, message,
                     )
                     return await self._local_multimodal_fallback(
                         audio_features, video_features, text_features, participant_id
                     )
+                logger.error(
+                    "[ML] ← non-retriable error %d in %.2fs: %s",
+                    resp.status_code, elapsed, message,
+                )
                 raise RuntimeError(
-                    f"Multimodal API error ({resp.status_code}): {message}"
+                    f"Multimodal ML API error ({resp.status_code}): {message}"
                 ) from exc
             except httpx.HTTPError as exc:
-                logger.warning("ML service HTTP error (%s), running local inference fallback", exc)
+                logger.error("[ML] HTTPError → %s : %s — falling back to local inference", url, exc)
                 return await self._local_multimodal_fallback(
                     audio_features, video_features, text_features, participant_id
                 )
@@ -404,7 +446,10 @@ class MLClient:
 
     async def health_check(self) -> dict:
         """GET /health from the ML model service."""
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{self.base_url}/health")
+        url = f"{self.base_url}/health"
+        logger.info("[ML] → GET %s", url)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url)
+            logger.info("[ML] ← status=%d", resp.status_code)
             resp.raise_for_status()
             return resp.json()
