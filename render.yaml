@@ -24,19 +24,11 @@ services:
       - key: JWT_REFRESH_TOKEN_EXPIRE_DAYS
         value: "7"
       - key: CORS_ORIGINS
-        value: '["https://YOUR_VERCEL_URL.vercel.app"]'
+        value: '["https://depresso-speech-final.vercel.app","http://localhost:5173","http://localhost:3000"]'
       - key: STORAGE_PROVIDER
-        value: s3
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: ap-south-1
-      - key: S3_BUCKET_NAME
-        sync: false
+        value: postgres
       - key: ML_MODEL_URL
-        value: https://YOUR_ML_SERVER.onrender.com
+        value: https://koushik2109-mindscope-ml.hf.space
       - key: ADMIN_DEFAULT_EMAIL
         value: admin@mindscope.ai
       - key: ADMIN_DEFAULT_PASSWORD
