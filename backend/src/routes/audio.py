@@ -4,7 +4,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +93,7 @@ async def upload_audio(
 @router.get("/audio/{file_id}")
 async def get_audio_file(
     file_id: str,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -111,4 +112,5 @@ async def get_audio_file(
         media.storage_key,
         media_type=media.mime_type or "audio/webm",
         filename=media.original_filename or media.storage_key,
+        request=request,
     )

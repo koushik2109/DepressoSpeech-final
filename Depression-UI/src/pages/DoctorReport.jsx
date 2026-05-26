@@ -21,35 +21,77 @@ import {
   updateDoctorAssignment,
 } from "../services/api.js";
 
-function AudioPlayback({ fileId }) {
+function MediaPlayback({ fileId, mimeType }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const isVideo = mimeType && mimeType.startsWith("video/");
 
-  useEffect(() => {
-    if (!fileId) return undefined;
+  const load = (id) => {
+    if (!id) return;
+    setLoading(true);
+    setError("");
     let revoked = false;
     let objectUrl = "";
 
-    getAudioBlobUrl(fileId)
+    getAudioBlobUrl(id)
       .then(({ url: nextUrl }) => {
-        if (revoked) {
-          revokeBlobUrl(nextUrl);
-          return;
-        }
+        if (revoked) { revokeBlobUrl(nextUrl); return; }
         objectUrl = nextUrl;
         setUrl(nextUrl);
       })
-      .catch((err) => setError(err.message || "Audio unavailable"));
+      .catch((err) => {
+        const msg = err.message || "";
+        if (msg.toLowerCase().includes("failed to fetch") || msg.includes("NetworkError")) {
+          setError("Could not load recording — network error. Retrying may help.");
+        } else {
+          setError(msg || "Recording unavailable");
+        }
+      })
+      .finally(() => setLoading(false));
 
-    return () => {
-      revoked = true;
-      revokeBlobUrl(objectUrl);
-    };
+    return () => { revoked = true; revokeBlobUrl(objectUrl); };
+  };
+
+  useEffect(() => {
+    const cleanup = load(fileId);
+    return () => { if (cleanup) cleanup(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
 
-  if (!fileId) return <p className="text-sm text-[#9AA49F]">No audio saved.</p>;
-  if (error) return <p className="text-sm text-[#B45309]">{error}</p>;
-  if (!url) return <p className="text-sm text-[#6A766F]">Loading audio...</p>;
+  if (!fileId) return <p className="text-sm text-[#9AA49F]">No recording saved.</p>;
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-3">
+        <p className="text-sm text-[#B45309]">{error}</p>
+        <button
+          type="button"
+          onClick={() => load(fileId)}
+          className="text-xs font-semibold text-[#2D6A4F] underline hover:no-underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (loading || !url) {
+    return <p className="text-sm text-[#6A766F]">{loading ? "Loading recording…" : "Preparing…"}</p>;
+  }
+
+  if (isVideo) {
+    return (
+      <video
+        controls
+        controlsList="nodownload"
+        src={url}
+        className="w-full rounded-lg max-h-72"
+        preload="metadata"
+      />
+    );
+  }
+
   return (
     <audio
       controls
@@ -349,7 +391,7 @@ export default function DoctorReport() {
                   </span>
                 </div>
                 <div className="mt-4 rounded-xl border border-[#E8E8E8] bg-white p-3">
-                  <AudioPlayback fileId={answer.audioFileId} />
+                  <MediaPlayback fileId={answer.audioFileId} mimeType={answer.mimeType} />
                 </div>
               </article>
             ))}

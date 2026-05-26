@@ -513,6 +513,7 @@ async def doctor_report(
                     "audioUrl": f"/api/v1/files/audio/{answer.audio_file_id}" if answer.audio_file_id in media_by_id else None,
                     "fileName": getattr(media_by_id.get(answer.audio_file_id), "original_filename", None),
                     "fileSize": getattr(media_by_id.get(answer.audio_file_id), "file_size", None),
+                    "mimeType": getattr(media_by_id.get(answer.audio_file_id), "mime_type", None),
                 }
                 for answer in answers
             ],

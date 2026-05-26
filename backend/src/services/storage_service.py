@@ -18,12 +18,13 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
 import aiofiles
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 logger = logging.getLogger("mindscope.storage")
@@ -39,7 +40,7 @@ class StorageService(ABC):
         """Persist *content* and return the opaque *storage_key*."""
 
     @abstractmethod
-    async def serve(self, storage_key: str, media_type: str, filename: str):
+    async def serve(self, storage_key: str, media_type: str, filename: str, request: Request | None = None):
         """Return a FastAPI response that streams / redirects the file."""
 
     @abstractmethod
@@ -73,12 +74,16 @@ class LocalStorageService(StorageService):
         logger.debug("LocalStorage saved %s (%d bytes)", storage_key, len(content))
         return storage_key
 
-    async def serve(self, storage_key: str, media_type: str, filename: str):
+    async def serve(self, storage_key: str, media_type: str, filename: str, request: Request | None = None):
         file_path = self._path(storage_key)
         if not file_path.exists():
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="File missing from storage")
-        return FileResponse(str(file_path), media_type=media_type, filename=filename)
+        return FileResponse(
+            str(file_path),
+            media_type=media_type,
+            filename=filename,
+            headers={"Accept-Ranges": "bytes"},
+        )
 
     async def delete(self, storage_key: str) -> None:
         try:
@@ -150,7 +155,7 @@ class S3StorageService(StorageService):
         logger.debug("S3Storage saved %s (%d bytes)", s3_key, len(content))
         return storage_key
 
-    async def serve(self, storage_key: str, media_type: str, filename: str):
+    async def serve(self, storage_key: str, media_type: str, filename: str, request: Request | None = None):
         s3_key = self._key(storage_key)
         loop = asyncio.get_event_loop()
         url = await loop.run_in_executor(
@@ -241,8 +246,8 @@ class PostgreSQLStorageService(StorageService):
         logger.debug("PGStorage saved %s (%d bytes)", storage_key, len(content))
         return storage_key
 
-    async def serve(self, storage_key: str, media_type: str, filename: str):
-        """Read bytes from DB and stream back as an HTTP response."""
+    async def serve(self, storage_key: str, media_type: str, filename: str, request: Request | None = None):
+        """Read bytes from DB and stream back as an HTTP response with range support."""
         from database.base import async_session_factory
         from src.models import MediaFileData
 
@@ -251,10 +256,37 @@ class PostgreSQLStorageService(StorageService):
             row = await db.get(MediaFileData, fid)
         if row is None:
             raise HTTPException(status_code=404, detail="File not found in database")
+
+        data = bytes(row.data)
+        total = len(data)
+        base_headers = {
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Accept-Ranges": "bytes",
+        }
+
+        range_header = (request.headers.get("range") if request else None)
+        if range_header:
+            m = re.match(r"bytes=(\d+)-(\d*)", range_header)
+            if m:
+                start = int(m.group(1))
+                end = int(m.group(2)) if m.group(2) else total - 1
+                end = min(end, total - 1)
+                chunk = data[start : end + 1]
+                return Response(
+                    content=chunk,
+                    status_code=206,
+                    media_type=media_type,
+                    headers={
+                        **base_headers,
+                        "Content-Length": str(len(chunk)),
+                        "Content-Range": f"bytes {start}-{end}/{total}",
+                    },
+                )
+
         return Response(
-            content=row.data,
+            content=data,
             media_type=media_type,
-            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+            headers={**base_headers, "Content-Length": str(total)},
         )
 
     async def delete(self, storage_key: str) -> None:
