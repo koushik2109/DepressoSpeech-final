@@ -23,14 +23,24 @@ def generate_otp(length: int = 6) -> str:
 
 
 def _send_smtp(to_email: str, msg: MIMEMultipart) -> bool:
-    """Synchronous SMTP send — called via asyncio.to_thread()."""
+    """Synchronous SMTP send — called via asyncio.to_thread().
+
+    Uses SMTP_SSL (port 465) by default which works on Render's infrastructure.
+    Falls back to STARTTLS (port 587) when SMTP_PORT is explicitly set to 587.
+    """
+    port = int(settings.SMTP_PORT or 465)
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        if port == 465:
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=8) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        else:
+            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=8) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
         logger.info(f"[EMAIL] Email sent to {to_email}")
         return True
     except Exception as e:

@@ -32,8 +32,8 @@ export default function Consultation() {
 
   useEffect(() => {
     loadConsultation();
-    // Poll for consultation updates every 5 seconds
-    const interval = setInterval(loadConsultation, 5000);
+    // Poll for consultation updates every 30 seconds
+    const interval = setInterval(loadConsultation, 30000);
     return () => clearInterval(interval);
   }, [loadConsultation]);
 
