@@ -130,8 +130,6 @@ const FaceAlignmentMonitor = ({
           );
 
           // Draw overlays onto overlay canvas (sized to match video)
-          const w = video.videoWidth || 640;
-          const h = video.videoHeight || 480;
           drawOverlays(overlayCanvasRef.current, w, h, detectionResult, result);
 
           // Update UI state
