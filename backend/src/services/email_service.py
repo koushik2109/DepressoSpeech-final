@@ -1,6 +1,15 @@
-"""Email service for sending OTP verification emails.
+"""Email service for MindScope.
 
-Fixed: Uses asyncio.to_thread() for non-blocking SMTP operations.
+Delivery strategy (tried in order):
+  1. Resend HTTP API  — works on Render Free Tier (port 443, never blocked)
+  2. smtplib fallback — works on local / VPS where port 465/587 is open
+
+Root cause of Render SMTP failure:
+  Render Free Tier firewalls block outbound TCP on ports 25, 465, and 587 at
+  the hypervisor level.  The OS raises `Errno 101 - Network is unreachable`
+  *before* the TLS handshake because the SYN packet is dropped — not because
+  of bad credentials or wrong config.  Switching to an HTTP-based provider
+  (Resend, SendGrid, Mailgun) bypasses this entirely since they use port 443.
 """
 
 import asyncio
@@ -17,36 +26,14 @@ logger = logging.getLogger("mindscope.email")
 settings = get_settings()
 
 
+# ── OTP helpers ───────────────────────────────────────────────────────────────
+
 def generate_otp(length: int = 6) -> str:
     """Generate a random numeric OTP."""
     return "".join(random.choices(string.digits, k=length))
 
 
-def _send_smtp(to_email: str, msg: MIMEMultipart) -> bool:
-    """Synchronous SMTP send — called via asyncio.to_thread().
-
-    Uses SMTP_SSL (port 465) by default which works on Render's infrastructure.
-    Falls back to STARTTLS (port 587) when SMTP_PORT is explicitly set to 587.
-    """
-    port = settings.SMTP_PORT or 465
-    try:
-        if port == 465:
-            with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=8) as server:
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
-        else:
-            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=8) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
-        logger.info(f"[EMAIL] Email sent to {to_email}")
-        return True
-    except Exception as e:
-        logger.error(f"[EMAIL] Failed to send email to {to_email}: {e}")
-        return False
-
+# ── HTML template ─────────────────────────────────────────────────────────────
 
 def _html_escape(value: object) -> str:
     return (
@@ -121,29 +108,116 @@ def _plain_from_rows(title: str, intro: str, rows: list[tuple[str, object]] | No
     return "\n".join(lines).strip()
 
 
+# ── Resend HTTP delivery (primary — works on Render Free Tier) ────────────────
+
+def _send_via_resend(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Send email via Resend HTTP API (port 443 — never blocked by any host).
+
+    Render Free Tier blocks outbound SMTP ports (25, 465, 587) at the firewall.
+    Resend uses a simple HTTPS REST call, which is always allowed.
+
+    Sign up free at https://resend.com — 3,000 emails/month on free tier.
+    """
+    try:
+        import resend  # pip install resend
+        resend.api_key = settings.RESEND_API_KEY
+
+        params: resend.Emails.SendParams = {
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+            "text": text_body,
+        }
+        response = resend.Emails.send(params)
+        email_id = response.get("id", "unknown") if isinstance(response, dict) else getattr(response, "id", "unknown")
+        logger.info("[EMAIL] Resend delivery OK → id=%s to=%s", email_id, to_email)
+        return True
+    except Exception as exc:
+        logger.error("[EMAIL] Resend delivery failed: %s", exc)
+        return False
+
+
+# ── SMTP fallback (local dev / VPS where port 465/587 is open) ────────────────
+
+def _send_via_smtp(to_email: str, msg: MIMEMultipart) -> bool:
+    """SMTP send — works locally but blocked on Render Free Tier.
+
+    Errno 101 (Network is unreachable) means the outbound TCP SYN packet was
+    dropped before reaching smtp.gmail.com — the connection never starts.
+    This is a host-level firewall rule, not a credentials or config issue.
+    """
+    port = settings.SMTP_PORT or 465
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=10) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        else:
+            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
+        logger.info("[EMAIL] SMTP delivery OK to %s", to_email)
+        return True
+    except OSError as exc:
+        if exc.errno == 101:
+            logger.error(
+                "[EMAIL] SMTP blocked (Errno 101 - Network unreachable). "
+                "Render Free Tier blocks outbound SMTP ports. "
+                "Set RESEND_API_KEY in your Render environment variables."
+            )
+        else:
+            logger.error("[EMAIL] SMTP OSError to %s: %s", to_email, exc)
+        return False
+    except Exception as exc:
+        logger.error("[EMAIL] SMTP failed to %s: %s", to_email, exc)
+        return False
+
+
+# ── Smart dispatcher — tries Resend first, falls back to SMTP ─────────────────
+
+def _dispatch_email(to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+    """Try Resend first (works everywhere), fall back to SMTP (local only)."""
+
+    # 1. Try Resend if API key is configured
+    if settings.RESEND_API_KEY:
+        return _send_via_resend(to_email, subject, html_body, text_body)
+
+    # 2. Try SMTP if credentials are configured (works locally, blocked on Render)
+    if settings.SMTP_USER and settings.SMTP_PASSWORD:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"MindScope <{settings.SMTP_USER}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+        return _send_via_smtp(to_email, msg)
+
+    # 3. No provider configured — log and skip
+    logger.warning(
+        "[EMAIL] No email provider configured. "
+        "Set RESEND_API_KEY (recommended) or SMTP_USER + SMTP_PASSWORD in environment. "
+        "Email to %s skipped.",
+        to_email,
+    )
+    logger.info("[EMAIL-DEV] Subject: %s\n%s", subject, text_body)
+    return True  # Non-fatal in dev
+
+
+# ── Public async API ──────────────────────────────────────────────────────────
+
 async def send_email_async(
     to_email: str,
     subject: str,
     text_body: str,
     html_body: str | None = None,
 ) -> bool:
-    """Send a generic transactional email using the configured SMTP account."""
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning(
-            "[EMAIL] SMTP not configured — transactional email skipped. "
-            "Set SMTP_USER and SMTP_PASSWORD in .env"
-        )
-        logger.info(f"[EMAIL-DEV] To: {to_email} | Subject: {subject}\n{text_body}")
-        return True
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"MindScope <{settings.SMTP_USER}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(text_body, "plain"))
-    msg.attach(MIMEText(html_body or _build_card_html(subject, text_body), "html"))
-
-    return await asyncio.to_thread(_send_smtp, to_email, msg)
+    """Send a transactional email. Uses Resend if configured, else SMTP."""
+    _html = html_body or _build_card_html(subject, text_body)
+    return await asyncio.to_thread(_dispatch_email, to_email, subject, _html, text_body)
 
 
 async def send_card_email_async(
@@ -162,60 +236,10 @@ async def send_card_email_async(
     )
 
 
-def send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
-    """Send an OTP verification email (synchronous version for backward compat).
-
-    Args:
-        to_email: Recipient email address
-        otp: The OTP code to send
-        user_name: User's display name
-
-    Returns:
-        True if email was sent successfully, False otherwise
-    """
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning(
-            "[EMAIL] SMTP not configured — OTP email skipped. "
-            "Set SMTP_USER and SMTP_PASSWORD in .env"
-        )
-        logger.info(f"[EMAIL-DEV] OTP for {to_email}: {otp}")
-        return True
-
-    msg = _build_otp_message(to_email, otp, user_name)
-    return _send_smtp(to_email, msg)
-
-
 async def send_otp_email_async(to_email: str, otp: str, user_name: str = "User") -> bool:
-    """Send an OTP verification email without blocking the event loop.
-
-    Uses asyncio.to_thread() to run SMTP in a thread pool.
-    """
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning(
-            "[EMAIL] SMTP not configured — OTP email skipped. "
-            "Set SMTP_USER and SMTP_PASSWORD in .env"
-        )
-        logger.info(f"[EMAIL-DEV] OTP for {to_email}: {otp}")
-        return True
-
+    """Send OTP verification email without blocking the event loop."""
     msg = _build_otp_message(to_email, otp, user_name)
-    return await asyncio.to_thread(_send_smtp, to_email, msg)
-
-
-def _build_otp_message(to_email: str, otp: str, user_name: str) -> MIMEMultipart:
-    """Build the OTP email message."""
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"MindScope — Your Verification Code: {otp}"
-    msg["From"] = f"MindScope <{settings.SMTP_USER}>"
-    msg["To"] = to_email
-
-    text_body = (
-        f"Hi {user_name},\n\n"
-        f"Your MindScope verification code is: {otp}\n\n"
-        f"This code expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n\n"
-        f"If you did not request this, ignore this email."
-    )
-
+    subject = f"MindScope — Your Verification Code: {otp}"
     html_body = _build_card_html(
         title=f"Hi {user_name}, verify your email",
         intro="Use the verification code below to complete your account setup.",
@@ -225,7 +249,57 @@ def _build_otp_message(to_email: str, otp: str, user_name: str) -> MIMEMultipart
         ],
         footer="If you did not request this code, you can safely ignore this email.",
     )
+    text_body = (
+        f"Hi {user_name},\n\n"
+        f"Your MindScope verification code is: {otp}\n\n"
+        f"This code expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n\n"
+        f"If you did not request this, ignore this email."
+    )
+    return await asyncio.to_thread(_dispatch_email, to_email, subject, html_body, text_body)
 
+
+def send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
+    """Synchronous OTP send (backward-compat wrapper)."""
+    subject = f"MindScope — Your Verification Code: {otp}"
+    html_body = _build_card_html(
+        title=f"Hi {user_name}, verify your email",
+        intro="Use the verification code below to complete your account setup.",
+        rows=[
+            ("Verification code", otp),
+            ("Expires in", f"{settings.OTP_EXPIRE_MINUTES} minutes"),
+        ],
+        footer="If you did not request this code, you can safely ignore this email.",
+    )
+    text_body = (
+        f"Hi {user_name},\n\n"
+        f"Your MindScope verification code is: {otp}\n\n"
+        f"This code expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n\n"
+        f"If you did not request this, ignore this email."
+    )
+    return _dispatch_email(to_email, subject, html_body, text_body)
+
+
+def _build_otp_message(to_email: str, otp: str, user_name: str) -> MIMEMultipart:
+    """Build the OTP MIME message (used by SMTP fallback path)."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"MindScope — Your Verification Code: {otp}"
+    msg["From"] = f"MindScope <{settings.SMTP_USER}>"
+    msg["To"] = to_email
+    text_body = (
+        f"Hi {user_name},\n\n"
+        f"Your MindScope verification code is: {otp}\n\n"
+        f"This code expires in {settings.OTP_EXPIRE_MINUTES} minutes.\n\n"
+        f"If you did not request this, ignore this email."
+    )
+    html_body = _build_card_html(
+        title=f"Hi {user_name}, verify your email",
+        intro="Use the verification code below to complete your account setup.",
+        rows=[
+            ("Verification code", otp),
+            ("Expires in", f"{settings.OTP_EXPIRE_MINUTES} minutes"),
+        ],
+        footer="If you did not request this code, you can safely ignore this email.",
+    )
     msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
     return msg

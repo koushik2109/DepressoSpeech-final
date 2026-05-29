@@ -74,12 +74,18 @@ class Settings(BaseSettings):
     ADMIN_DEFAULT_EMAIL: str = "admin@mindscope.ai"
     ADMIN_DEFAULT_PASSWORD: str = "Admin@2026!"
 
-    # SMTP (for OTP emails)
+    # SMTP (legacy — only works on non-Render infra)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     OTP_EXPIRE_MINUTES: int = 10
+
+    # Resend — HTTP-based email (works on Render Free Tier, no SMTP port needed)
+    # Sign up free at https://resend.com — 3,000 emails/month free
+    RESEND_API_KEY: str = ""
+    # Use your verified domain, or "onboarding@resend.dev" for testing
+    RESEND_FROM_EMAIL: str = "MindScope <onboarding@resend.dev>"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""

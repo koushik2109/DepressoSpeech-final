@@ -418,6 +418,60 @@ async def logout(body: LogoutRequest):
     return {"success": True}
 
 
+# ── Diagnostics (admin/debug only) ──────────────────────
+
+@router.get("/diag/connectivity")
+async def diag_connectivity():
+    """Test outbound network connectivity to SMTP and Resend.
+
+    Helps diagnose Render Free Tier SMTP port blocking (Errno 101).
+    Hit GET /api/v1/auth/diag/connectivity to see what is reachable.
+    """
+    import asyncio, socket
+    results = {}
+
+    def _tcp_probe(host: str, port: int, timeout: float = 5.0) -> dict:
+        try:
+            sock = socket.create_connection((host, port), timeout=timeout)
+            sock.close()
+            return {"reachable": True, "error": None}
+        except OSError as e:
+            return {"reachable": False, "error": f"OSError {e.errno}: {e.strerror}"}
+        except Exception as e:
+            return {"reachable": False, "error": str(e)}
+
+    probes = [
+        ("smtp_gmail_465", "smtp.gmail.com", 465),
+        ("smtp_gmail_587", "smtp.gmail.com", 587),
+        ("resend_api_443", "api.resend.com", 443),
+        ("dns_check_8_8_8_8", "8.8.8.8", 53),
+    ]
+
+    for label, host, port in probes:
+        results[label] = await asyncio.to_thread(_tcp_probe, host, port)
+
+    resend_configured = bool(settings.RESEND_API_KEY)
+    smtp_configured = bool(settings.SMTP_USER and settings.SMTP_PASSWORD)
+
+    return {
+        "connectivity": results,
+        "config": {
+            "resend_api_key_set": resend_configured,
+            "smtp_user_set": smtp_configured,
+            "smtp_host": settings.SMTP_HOST,
+            "smtp_port": settings.SMTP_PORT,
+            "resend_from": settings.RESEND_FROM_EMAIL if resend_configured else "(not set)",
+        },
+        "recommendation": (
+            "Resend API is configured and port 443 is reachable — email should work."
+            if resend_configured and results.get("resend_api_443", {}).get("reachable")
+            else "SMTP ports appear blocked (Render Free Tier). Set RESEND_API_KEY in Render dashboard."
+            if not results.get("smtp_gmail_465", {}).get("reachable") and not results.get("smtp_gmail_587", {}).get("reachable")
+            else "SMTP reachable — check SMTP_USER and SMTP_PASSWORD env vars."
+        ),
+    }
+
+
 # ── Me ─────────────────────────────────────────────────
 
 @router.get("/me")
