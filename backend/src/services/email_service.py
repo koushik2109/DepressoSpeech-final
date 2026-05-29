@@ -23,30 +23,71 @@ def generate_otp(length: int = 6) -> str:
 
 
 def _send_smtp(to_email: str, msg: MIMEMultipart) -> bool:
-    """Synchronous SMTP send — called via asyncio.to_thread().
+    """Send email via SMTP with detailed debugging."""
 
-    Uses SMTP_SSL (port 465) by default which works on Render's infrastructure.
-    Falls back to STARTTLS (port 587) when SMTP_PORT is explicitly set to 587.
-    """
-    port = settings.SMTP_PORT or 465
+    port = settings.SMTP_PORT or 587
+
+    logger.info("========== SMTP DEBUG ==========")
+    logger.info(f"SMTP_HOST = {settings.SMTP_HOST}")
+    logger.info(f"SMTP_PORT = {port}")
+    logger.info(f"SMTP_USER = {settings.SMTP_USER}")
+    logger.info("================================")
+
     try:
         if port == 465:
-            with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=8) as server:
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
-        else:
-            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=8) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_USER, to_email, msg.as_string())
-        logger.info(f"[EMAIL] Email sent to {to_email}")
-        return True
-    except Exception as e:
-        logger.error(f"[EMAIL] Failed to send email to {to_email}: {e}")
-        return False
+            logger.info("Using SMTP_SSL")
 
+            with smtplib.SMTP_SSL(
+                settings.SMTP_HOST,
+                port,
+                timeout=15
+            ) as server:
+
+                server.login(
+                    settings.SMTP_USER,
+                    settings.SMTP_PASSWORD
+                )
+
+                server.sendmail(
+                    settings.SMTP_USER,
+                    to_email,
+                    msg.as_string()
+                )
+
+        else:
+            logger.info("Using STARTTLS")
+
+            with smtplib.SMTP(
+                settings.SMTP_HOST,
+                port,
+                timeout=15
+            ) as server:
+
+                server.ehlo()
+
+                server.starttls()
+
+                server.ehlo()
+
+                server.login(
+                    settings.SMTP_USER,
+                    settings.SMTP_PASSWORD
+                )
+
+                server.sendmail(
+                    settings.SMTP_USER,
+                    to_email,
+                    msg.as_string()
+                )
+
+        logger.info(f"[EMAIL] Email sent successfully to {to_email}")
+        return True
+
+    except Exception as e:
+        logger.exception(
+            f"[EMAIL] Failed to send email to {to_email}: {e}"
+        )
+        return False
 
 def _html_escape(value: object) -> str:
     return (
