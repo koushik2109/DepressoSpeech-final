@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
     API_V1_PREFIX: str = "/api/v1"
 
-    # Database – SQLite for simplicity
-    DATABASE_URL: str = f"sqlite+aiosqlite:///{(Path(__file__).resolve().parent.parent / 'mindscope.db').as_posix()}"
+    # Database — PostgreSQL
+    DATABASE_URL: str = "postgresql+asyncpg://mindscope:8dMM0uNpZxhthUnIfeXp8eYL8oDZ3efH@dpg-d85h47d7vvec73823ifg-a.singapore-postgres.render.com/mindscope_to6r"
     DATABASE_ECHO: bool = False
 
     # JWT
@@ -36,6 +36,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
+        "https://depresso-speech-final.vercel.app",
     ]
 
     # Storage

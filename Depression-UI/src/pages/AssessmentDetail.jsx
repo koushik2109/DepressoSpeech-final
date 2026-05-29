@@ -59,7 +59,11 @@ function MediaPlayback({ fileId, isVideoHint = false }) {
     if (!fileId) return undefined;
     let revoked = false;
     let objectUrl = "";
-    setLoading(true);
+    setTimeout(() => {
+      if (!revoked) {
+        setLoading(true);
+      }
+    }, 0);
 
     getAudioBlobUrl(fileId)
       .then(({ url: nextUrl, blob }) => {
@@ -170,8 +174,6 @@ export default function AssessmentDetail() {
     [assessment?.answers],
   );
 
-  const mlModelDetails = assessment?.mlModelDetails;
-
   if (!user || user.role !== "patient") {
     return <Navigate to="/signin" replace />;
   }
@@ -202,7 +204,6 @@ export default function AssessmentDetail() {
     );
   }
 
-  const mlDetails = assessment.mlDetails;
   const severityClass =
     severityTone[assessment.severity] ||
     "bg-gray-50 text-gray-700 border-gray-200";

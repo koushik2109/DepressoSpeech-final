@@ -21,6 +21,11 @@ export default function VoiceRecorder({
   onRecordingComplete,
   onRecordingCleared,
   enableVideo = false,
+  isPaused = false,
+  onPauseStateChange,
+  onRecordingStart,
+  onRecordingStop,
+  onMediaRecorderReady,
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -49,11 +54,31 @@ export default function VoiceRecorder({
   const secondsRef = useRef(0);
   const isRecordingRef = useRef(false);
   const enableVideoRef = useRef(enableVideo);
+  const isPausedRef = useRef(isPaused);
 
   useEffect(() => {
     enableVideoRef.current = enableVideo;
     setEffectiveVideoEnabled(enableVideo);
   }, [enableVideo]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    if (isPaused) {
+      // Keep MediaRecorder running continuously to prevent browser-level keyframe desync and video freezing.
+      // Simply suspend the AudioContext to flatline the visual waveform during the pause.
+      if (audioContextRef.current && audioContextRef.current.state === "running") {
+        audioContextRef.current.suspend().catch(() => {});
+      }
+    } else {
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        audioContextRef.current.resume().catch(() => {});
+      }
+    }
+    onPauseStateChange?.(isPaused);
+  }, [isPaused, onPauseStateChange]);
 
   const formatTime = (v) => {
     const m = Math.floor(v / 60).toString().padStart(2, "0");
@@ -90,7 +115,8 @@ export default function VoiceRecorder({
     setRecordingBlobSize(0);
     recordedBlobRef.current = null;
     onRecordingCleared?.();
-  }, [onRecordingCleared]);
+    onRecordingStop?.();
+  }, [onRecordingCleared, onRecordingStop]);
 
   const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
@@ -98,6 +124,14 @@ export default function VoiceRecorder({
     const dataArray = dataArrayRef.current;
     const freqDataArray = freqDataArrayRef.current;
     if (!canvas || !analyser || !dataArray || !freqDataArray) return;
+
+    if (isPausedRef.current) {
+      drawIdleLine();
+      if (isRecordingRef.current) {
+        animFrameRef.current = requestAnimationFrame(drawWaveform);
+      }
+      return;
+    }
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -149,15 +183,16 @@ export default function VoiceRecorder({
     if (isRecordingRef.current) {
       animFrameRef.current = requestAnimationFrame(drawWaveform);
     }
-  }, []);
+  }, [drawIdleLine]);
 
   const stopRecording = useCallback(() => {
     isRecordingRef.current = false;
     clearInterval(timerRef.current);
     timerRef.current = null;
     setIsRecording(false);
+    onRecordingStop?.();
 
-    if (mediaRecorderRef.current?.state === "recording") {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
     if (streamRef.current) {
@@ -174,7 +209,7 @@ export default function VoiceRecorder({
     }
     setCameraReady(false);
     drawIdleLine();
-  }, [drawIdleLine]);
+  }, [drawIdleLine, onRecordingStop]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -224,6 +259,9 @@ export default function VoiceRecorder({
       }
 
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = 0.85;
@@ -250,6 +288,7 @@ export default function VoiceRecorder({
           : { audioBitsPerSecond: 128000 }),
       });
       mediaRecorderRef.current = recorder;
+      onMediaRecorderReady?.(recorder);
 
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
@@ -272,8 +311,10 @@ export default function VoiceRecorder({
       setSeconds(0);
       secondsRef.current = 0;
       drawWaveform();
+      onRecordingStart?.();
 
       timerRef.current = setInterval(() => {
+        if (isPausedRef.current) return;
         secondsRef.current += 1;
         setSeconds(secondsRef.current);
         if (secondsRef.current >= MAX_RECORDING_SECONDS) stopRecording();
@@ -286,7 +327,7 @@ export default function VoiceRecorder({
         : "Device access failed. Please try again.";
       setCameraError(msg);
     }
-  }, [clearCurrentRecording, onRecordingComplete, stopRecording, drawWaveform]);
+  }, [clearCurrentRecording, onRecordingComplete, stopRecording, drawWaveform, onRecordingStart, onMediaRecorderReady]);
 
   // Canvas resize
   useEffect(() => {

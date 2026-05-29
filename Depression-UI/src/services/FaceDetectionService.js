@@ -49,11 +49,15 @@ const FaceDetectionService = (() => {
         outputFacialTransformationMatrixes: false,
       };
 
-      const MODEL_URL =
-        'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+      const isLocal =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+
+      const MODEL_URL = isLocal
+        ? '/face_landmarker.task'
+        : 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
       // Dynamically select delegate: try GPU first for buttery-smooth performance, fallback to CPU on VM/headless setups.
-      let delegate = 'GPU';
       try {
         faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
           ...commonOptions,
@@ -62,7 +66,6 @@ const FaceDetectionService = (() => {
         console.log('[FaceDetectionService] Initialized with delegate=GPU');
       } catch (gpuError) {
         console.warn('[FaceDetectionService] GPU delegate failed, falling back to CPU:', gpuError);
-        delegate = 'CPU';
         faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
           ...commonOptions,
           baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
@@ -175,10 +178,6 @@ const FaceDetectionService = (() => {
     const noseTip = landmarks[1];
     const leftEyeInner = landmarks[33];
     const rightEyeInner = landmarks[263];
-    const leftEyeOuter = landmarks[133];
-    const rightEyeOuter = landmarks[362];
-    const mouthLeft = landmarks[61];
-    const mouthRight = landmarks[291];
     const chin = landmarks[152];
     const foreheadCenter = landmarks[10];
 

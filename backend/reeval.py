@@ -13,23 +13,27 @@ import json
 import sys
 import numpy as np
 from pathlib import Path
-from datetime import timezone, timedelta
+from datetime import timedelta
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config.settings import get_settings
 from database import async_session_factory
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 settings = get_settings()
 STORAGE_BASE = Path(settings.STORAGE_LOCAL_PATH).parent / "multimodal"
 
 
 def _severity_label(score: float) -> str:
-    if score < 5:   return "Minimal"
-    if score < 10:  return "Mild"
-    if score < 15:  return "Moderate"
-    if score < 20:  return "Moderately Severe"
+    if score < 5:
+        return "Minimal"
+    if score < 10:
+        return "Mild"
+    if score < 15:
+        return "Moderate"
+    if score < 20:
+        return "Moderately Severe"
     return "Severe"
 
 
@@ -148,7 +152,7 @@ async def main():
         class_prob = result.get("classification") or result.get("depression_probability")
         modality_scores = result.get("modality_scores") or result.get("modality_contributions") or {}
 
-        print(f"\nML result:")
+        print("\nML result:")
         print(f"  phq_total       : {raw_phq:.4f}  → capped: {new_score:.2f}")
         print(f"  severity        : {severity}")
         print(f"  confidence      : {conf:.4f}")
@@ -156,25 +160,27 @@ async def main():
         print(f"  modality_scores : {modality_scores}")
 
         # ── 4. Update regular assessment ─────────────────────────────────────
-        latest_assessment.score_total = int(round(new_score))
-        latest_assessment.ml_score    = new_score
-        latest_assessment.ml_severity = severity
-        latest_assessment.severity    = severity
-        latest_assessment.status      = "completed"
-        latest_assessment.report_status   = "available"
-        latest_assessment.is_report_ready = True
+        setattr(latest_assessment, "score_total", round(new_score))
+        setattr(latest_assessment, "ml_score", new_score)
+        setattr(latest_assessment, "ml_severity", severity)
+        setattr(latest_assessment, "severity", severity)
+        setattr(latest_assessment, "status", "completed")
+        setattr(latest_assessment, "report_status", "available")
+        setattr(latest_assessment, "is_report_ready", True)
 
         # ── 5. Snapshot per-Q scores BEFORE overwriting session phq8_score ─────
         # Must happen before step 5 because step 5 overwrites phq8_score → combined value.
         q_score_map_pre: dict[int, int] = {}
         for s in mm_sessions:
             try:
-                dbg = json.loads(s.debug_json or "{}")
+                dbg_val = getattr(s, "debug_json", "{}") or "{}"
+                dbg = json.loads(str(dbg_val))
                 qid = dbg.get("question_id")
-                if qid and s.phq8_score is not None:
+                phq_val = getattr(s, "phq8_score", None)
+                if qid and phq_val is not None:
                     # phq8_score is full PHQ-8 total (0-24) from this one question's video
                     # divide by 8 to get per-question estimate in [0, 3]
-                    q_score_map_pre[int(qid)] = max(0, min(3, round(float(s.phq8_score) / 8.0)))
+                    q_score_map_pre[int(qid)] = max(0, min(3, round(float(phq_val) / 8.0)))
             except Exception:
                 pass
 
@@ -182,16 +188,15 @@ async def main():
         # NOTE: do NOT overwrite phq8_score — each session keeps its own per-question score.
         # The combined phq_total lives only in assessment.ml_score.
         for s in mm_sessions:
-            s.confidence         = conf
-            s.depression_probability = float(class_prob) if class_prob else None
-            s.is_classification  = class_prob is not None
-            s.predicted_label    = int(class_prob > 0.5) if class_prob else None
-            s.audio_contribution = modality_scores.get("audio", s.audio_contribution)
-            s.video_contribution = modality_scores.get("video", s.video_contribution)
-            s.text_contribution  = modality_scores.get("text",  s.text_contribution)
+            setattr(s, "confidence", conf)
+            setattr(s, "depression_probability", float(class_prob) if class_prob else None)
+            setattr(s, "is_classification", class_prob is not None)
+            setattr(s, "predicted_label", int(class_prob > 0.5) if class_prob else None)
+            setattr(s, "audio_contribution", modality_scores.get("audio", getattr(s, "audio_contribution", 0.0)))
+            setattr(s, "video_contribution", modality_scores.get("video", getattr(s, "video_contribution", 0.0)))
+            setattr(s, "text_contribution", modality_scores.get("text", getattr(s, "text_contribution", 0.0)))
 
         # ── 7. Set per-question answer scores using pre-snapshot map ──────────
-        phq_questions = result.get("phq_questions") or []
         answers = (await db.execute(
             select(AssessmentAnswer)
             .where(AssessmentAnswer.assessment_id == latest_assessment.id)
@@ -205,31 +210,31 @@ async def main():
             for answer in answers:
                 qid = getattr(answer, "question_id", None)
                 if qid and int(qid) in q_score_map:
-                    answer.score = q_score_map[int(qid)]
+                    setattr(answer, "score", q_score_map[int(qid)])
                     mapped_count += 1
                 else:
                     # Fallback: distribute combined phq_total evenly for unmapped questions
                     n = len(answers)
-                    total_int = int(round(new_score))
-                    answer.score = min(3, total_int // n)
+                    total_int = round(new_score)
+                    setattr(answer, "score", min(3, total_int // n))
 
             if mapped_count:
                 print(f"\n  Per-Q from individual sessions (phq8/8): {q_score_map}")
                 print(f"  Mapped {mapped_count}/{len(answers)} answers with real per-Q scores")
             else:
                 n = len(answers)
-                total_int = int(round(new_score))
+                total_int = round(new_score)
                 base, rem = total_int // n, total_int % n
                 for i, answer in enumerate(answers):
-                    answer.score = min(3, base + (1 if i < rem else 0))
+                    setattr(answer, "score", min(3, base + (1 if i < rem else 0)))
                 print(f"\n  No question_id in sessions (old data) — distributed {total_int} over {n} answers")
             print(f"  Updated {len(answers)} answer rows")
 
         await db.commit()
         print(f"\n✓ Assessment {latest_assessment.id[:8]} updated:")
-        print(f"    score_total : {latest_assessment.score_total}/24")
-        print(f"    severity    : {latest_assessment.severity}")
-        print(f"    ml_score    : {latest_assessment.ml_score:.2f}")
+        print(f"    score_total : {getattr(latest_assessment, 'score_total', 0)}/24")
+        print(f"    severity    : {getattr(latest_assessment, 'severity', 'N/A')}")
+        print(f"    ml_score    : {getattr(latest_assessment, 'ml_score', 0.0):.2f}")
 
 
 if __name__ == "__main__":

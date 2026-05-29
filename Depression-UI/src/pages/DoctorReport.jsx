@@ -29,8 +29,10 @@ function MediaPlayback({ fileId, mimeType }) {
 
   const load = (id) => {
     if (!id) return;
-    setLoading(true);
-    setError("");
+    setTimeout(() => {
+      setLoading(true);
+      setError("");
+    }, 0);
     let revoked = false;
     let objectUrl = "";
 
@@ -56,7 +58,6 @@ function MediaPlayback({ fileId, mimeType }) {
   useEffect(() => {
     const cleanup = load(fileId);
     return () => { if (cleanup) cleanup(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
 
   if (!fileId) return <p className="text-sm text-[#9AA49F]">No recording saved.</p>;

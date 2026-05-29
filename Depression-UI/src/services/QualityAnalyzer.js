@@ -29,7 +29,7 @@ class QualityAnalyzer {
 
     // Calculate quality scores
     const brightness = this.calculateBrightness(imageData);
-    const blur = this.calculateBlur(imageData, canvas.width, canvas.height);
+    const blur = this.calculateBlur(imageData);
     const motion = this.calculateMotion(faceGeometry);
     const visibility = this.calculateFaceVisibility(faceGeometry);
     const centering = this.calculateFaceCentering(faceGeometry, canvas);
@@ -94,7 +94,7 @@ class QualityAnalyzer {
    * Detect blur using Laplacian variance
    * Lower variance = more blurred
    */
-  calculateBlur(imageData, width, height) {
+  calculateBlur(imageData) {
     const data = imageData.data;
     let variance = 0;
     let mean = 0;

@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/Card.jsx";
 import Button from "../components/Button.jsx";
-import VoiceRecorder from "../components/VoiceRecorder.jsx";
+import EnhancedVoiceRecorder from "../components/EnhancedVoiceRecorder.jsx";
 import EnhancedDeviceCheck from "../components/EnhancedDeviceCheck.jsx";
 import { buildQuestionSet, getSeverityLabel } from "../data/questionsData.js";
 import {
@@ -11,7 +11,6 @@ import {
   scoreQuestionVideo,
   saveAssessment,
   uploadAudio,
-  processVideoRecording,
 } from "../services/api.js";
 
 function clampScore3(v) {
@@ -420,11 +419,13 @@ export default function Assessment() {
                   </p>
                 )}
 
-              <VoiceRecorder
+              <EnhancedVoiceRecorder
                 key={`${question.id}-${enableVideo}`}
                 onRecordingComplete={handleRecordingComplete}
                 onRecordingCleared={handleRecordingCleared}
                 enableVideo={enableVideo}
+                requireContinuousAlignment={true}
+                showMetrics={true}
               />
             </div>
 

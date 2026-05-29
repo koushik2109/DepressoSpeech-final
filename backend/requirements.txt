@@ -1,7 +1,6 @@
 fastapi>=0.111
 uvicorn[standard]>=0.29
 sqlalchemy>=2.0
-aiosqlite>=0.20
 aiofiles>=23.2
 python-jose[cryptography]>=3.3
 bcrypt>=4.0
@@ -18,8 +17,7 @@ librosa>=0.10
 soundfile>=0.12          # required by librosa for wav I/O
 
 # ── Database drivers ───────────────────────────────────────────
-# SQLite (default dev):  aiosqlite (already listed above)
-# PostgreSQL (prod):     asyncpg + psycopg2 (choose one async driver)
+# PostgreSQL (prod):     asyncpg (async driver)
 asyncpg>=0.29            # async PostgreSQL driver for SQLAlchemy
 
 # ── S3 object storage (only when STORAGE_PROVIDER=s3) ─────────

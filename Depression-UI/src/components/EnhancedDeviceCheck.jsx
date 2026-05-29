@@ -9,13 +9,11 @@ import Button from './Button.jsx';
 import FaceAlignmentMonitor from './FaceAlignmentMonitor.jsx';
 
 export default function EnhancedDeviceCheck({ onReady }) {
-  const videoRef = useRef(null);
   const [micOk, setMicOk] = useState(null);
   const [camOk, setCamOk] = useState(null);
   const [micLevel, setMicLevel] = useState(0);
   const [videoStream, setVideoStream] = useState(null);
   const [enableVideo, setEnableVideo] = useState(true);
-  const [previewVisible, setPreviewVisible] = useState(true);
   const [patientReady, setPatientReady] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [deviceMessage, setDeviceMessage] = useState('Checking devices...');
@@ -23,6 +21,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
   const [alignmentIssues, setAlignmentIssues] = useState([]);
   const [integrityScore, setIntegrityScore] = useState(0);
 
+  const activeRequestIdRef = useRef(0);
   const streamRef = useRef(null);
   const animRef = useRef(null);
   const analyserRef = useRef(null);
@@ -34,12 +33,14 @@ export default function EnhancedDeviceCheck({ onReady }) {
     if (audioCtxRef.current)
       audioCtxRef.current.close().catch(() => {});
     streamRef.current = null;
+    setVideoStream(null);
   }, []);
 
   /**
    * Test audio and camera devices
    */
   const testDevices = useCallback(async () => {
+    const requestId = ++activeRequestIdRef.current;
     cleanup();
     setMicOk(null);
     setCamOk(null);
@@ -67,6 +68,13 @@ export default function EnhancedDeviceCheck({ onReady }) {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Abort if a newer request has been initiated
+      if (requestId !== activeRequestIdRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
       streamRef.current = stream;
       setMicOk(true);
 
@@ -75,21 +83,20 @@ export default function EnhancedDeviceCheck({ onReady }) {
         setCamOk(true);
         setVideoStream(stream);
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-
         setDeviceMessage(
           'Camera ready. Align your face with the guide for continuous validation.'
         );
       } else {
         setCamOk(enableVideo ? false : null);
+        setVideoStream(null);
         setDeviceMessage('Audio-only mode is ready.');
       }
 
       // Audio level monitoring
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       ctx.createMediaStreamSource(stream).connect(analyser);
@@ -98,6 +105,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
 
       const buf = new Uint8Array(analyser.frequencyBinCount);
       const poll = () => {
+        if (requestId !== activeRequestIdRef.current) return;
         analyser.getByteFrequencyData(buf);
         const avg = buf.reduce((a, b) => a + b, 0) / buf.length / 255;
         setMicLevel(avg);
@@ -105,6 +113,7 @@ export default function EnhancedDeviceCheck({ onReady }) {
       };
       poll();
     } catch (err) {
+      if (requestId !== activeRequestIdRef.current) return;
       if (
         err.name === 'NotAllowedError' ||
         err.name === 'NotFoundError'
@@ -154,7 +163,9 @@ export default function EnhancedDeviceCheck({ onReady }) {
    */
   useEffect(() => {
     if (integrityScore <= 80 && patientReady) {
-      setPatientReady(false);
+      setTimeout(() => {
+        setPatientReady(false);
+      }, 0);
     }
   }, [integrityScore, patientReady]);
 
@@ -411,10 +422,55 @@ export default function EnhancedDeviceCheck({ onReady }) {
                     : 'Checking...'}
                 </p>
               </div>
-              <p className="text-xs text-[#999]">
+              <p className="text-xs text-[#999] leading-relaxed">
                 Speak naturally — the bar should move when you talk. Aim for the
                 green zone (15-60%).
               </p>
+
+              {/* Beautiful instructions to fill the space and balance the layout */}
+              <div className="mt-6 pt-6 border-t border-[#E8E8E8] space-y-5">
+                <div>
+                  <h4 className="text-xs font-bold text-[#1B1B1B] uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <span>🎙️</span> Voice & Audio Guidelines
+                  </h4>
+                  <ul className="space-y-2 text-xs text-[#555] leading-relaxed">
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#2D6A4F] font-bold">•</span>
+                      <span><strong>Quiet Room:</strong> Avoid ambient noise like fans, background chatter, or open windows.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#2D6A4F] font-bold">•</span>
+                      <span><strong>Natural Pace:</strong> Speak clearly and at your normal conversational volume and speed.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-[#2D6A4F] font-bold">•</span>
+                      <span><strong>Proximity:</strong> Sit at a comfortable distance from your mic so your voice is captured well.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {enableVideo && (
+                  <div>
+                    <h4 className="text-xs font-bold text-[#1B1B1B] uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span>📷</span> Camera & Face Guidelines
+                    </h4>
+                    <ul className="space-y-2 text-xs text-[#555] leading-relaxed">
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#2D6A4F] font-bold">•</span>
+                        <span><strong>Center & Frame:</strong> Position yourself so your face sits inside the dotted oval guide.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#2D6A4F] font-bold">•</span>
+                        <span><strong>Lighting:</strong> Ensure front-facing light. Avoid strong overhead lights or heavy backlighting.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#2D6A4F] font-bold">•</span>
+                        <span><strong>Maintain Position:</strong> Try not to look away, tilt, or turn your head during the screening session.</span>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         </div>

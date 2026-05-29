@@ -13,7 +13,6 @@ New endpoints for multimodal depression assessment:
 import json
 import uuid
 import logging
-import asyncio
 import aiofiles
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,11 +20,13 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, Column, String, Float, Text, Boolean, DateTime, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # pyrefly: ignore [missing-import]
 from database import get_db, async_session_factory
+# pyrefly: ignore [missing-import]
+from database.base import Base
 # pyrefly: ignore [missing-import]
 from src.models import User, ProcessingJob
 # pyrefly: ignore [missing-import]
@@ -44,10 +45,6 @@ router = APIRouter(prefix="/multimodal", tags=["multimodal"])
 
 # ── Database Model (stored in same DB) ─────────────────
 
-from sqlalchemy import Column, String, Float, Text, Boolean, DateTime, Integer, SmallInteger
-# pyrefly: ignore [missing-import]
-from database.base import Base
-
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -61,45 +58,45 @@ class MultimodalSession(Base):
     """Tracks a multimodal assessment session with uploaded features."""
     __tablename__ = "multimodal_sessions"
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    user_id = Column(String(36), nullable=False, index=True)
-    status = Column(String(16), default="pending")  # pending | processing | completed | failed
+    id: Any = Column(String(36), primary_key=True, default=_uuid)
+    user_id: Any = Column(String(36), nullable=False, index=True)
+    status: Any = Column(String(16), default="pending")  # pending | processing | completed | failed
 
     # Feature flags
-    has_audio = Column(Boolean, default=False)
-    has_video = Column(Boolean, default=False)
-    has_text = Column(Boolean, default=False)
+    has_audio: Any = Column(Boolean, default=False)
+    has_video: Any = Column(Boolean, default=False)
+    has_text: Any = Column(Boolean, default=False)
 
     # Feature storage keys (paths relative to storage dir)
-    audio_mfcc_key = Column(String(255), nullable=True)
-    audio_egemaps_key = Column(String(255), nullable=True)
-    audio_behavioral_key = Column(String(255), nullable=True)
-    video_openface_key = Column(String(255), nullable=True)
-    video_cnn_key = Column(String(255), nullable=True)
-    text_key = Column(String(255), nullable=True)
-    text_raw = Column(Text, nullable=True)
+    audio_mfcc_key: Any = Column(String(255), nullable=True)
+    audio_egemaps_key: Any = Column(String(255), nullable=True)
+    audio_behavioral_key: Any = Column(String(255), nullable=True)
+    video_openface_key: Any = Column(String(255), nullable=True)
+    video_cnn_key: Any = Column(String(255), nullable=True)
+    text_key: Any = Column(String(255), nullable=True)
+    text_raw: Any = Column(Text, nullable=True)
 
     # Prediction results
-    phq8_score = Column(Float, nullable=True)
-    severity = Column(String(32), nullable=True)
-    confidence = Column(Float, nullable=True)
-    audio_contribution = Column(Float, nullable=True)
-    video_contribution = Column(Float, nullable=True)
-    text_contribution = Column(Float, nullable=True)
-    modalities_used = Column(Text, nullable=True)  # JSON list
-    debug_json = Column(Text, nullable=True)
-    inference_time_ms = Column(Float, nullable=True)
+    phq8_score: Any = Column(Float, nullable=True)
+    severity: Any = Column(String(32), nullable=True)
+    confidence: Any = Column(Float, nullable=True)
+    audio_contribution: Any = Column(Float, nullable=True)
+    video_contribution: Any = Column(Float, nullable=True)
+    text_contribution: Any = Column(Float, nullable=True)
+    modalities_used: Any = Column(Text, nullable=True)  # JSON list
+    debug_json: Any = Column(Text, nullable=True)
+    inference_time_ms: Any = Column(Float, nullable=True)
     # Classification extras
-    is_classification = Column(Boolean, default=False)
-    depression_probability = Column(Float, nullable=True)
-    predicted_label = Column(Integer, nullable=True)
+    is_classification: Any = Column(Boolean, default=False)
+    depression_probability: Any = Column(Float, nullable=True)
+    predicted_label: Any = Column(Integer, nullable=True)
 
     # Processing
-    job_id = Column(String(36), nullable=True)
-    error_message = Column(Text, nullable=True)
+    job_id: Any = Column(String(36), nullable=True)
+    error_message: Any = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), default=_utcnow)
-    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    created_at: Any = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Any = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 
 # ── Pydantic Schemas ───────────────────────────────────
@@ -173,7 +170,7 @@ def _storage_dir() -> Path:
 async def _save_feature_file(data: bytes, session_id: str, name: str) -> str:
     """Save feature data to disk and return storage key."""
     try:
-        canonical_session_id = str(uuid.UUID(str(session_id)))
+        canonical_session_id = str(uuid.UUID(session_id))
     except ValueError as exc:
         raise ValueError("Invalid session_id format") from exc
 
@@ -815,13 +812,13 @@ async def process_batch(
     results = []
     completed = 0
     failed = 0
-    client = MLClient()
+    MLClient()
 
     for pid in body.participant_ids:
-        participant_dir = data_root / str(pid)
+        participant_dir = data_root / pid
         if not participant_dir.exists():
             results.append(BatchResultItem(
-                participant_id=str(pid),
+                participant_id=pid,
                 status="failed",
                 error=f"Participant directory not found: {participant_dir}",
             ))
@@ -835,7 +832,7 @@ async def process_batch(
 
             if not egemaps_file.exists() or not mfcc_file.exists():
                 results.append(BatchResultItem(
-                    participant_id=str(pid),
+                    participant_id=pid,
                     status="failed",
                     error="Missing eGeMAPS or MFCC feature files",
                 ))
@@ -887,15 +884,15 @@ async def process_batch(
                         logger.warning(f"Transcript loading failed for {pid}: {te}")
 
             # Save features to session storage for ML pipeline
-            session_dir = _storage_dir() / batch_session_id / str(pid)
+            session_dir = _storage_dir() / batch_session_id / pid
             session_dir.mkdir(parents=True, exist_ok=True)
 
             np.savetxt(str(session_dir / "egemaps.csv"), egemaps_data, delimiter=",", fmt="%.6f")
             np.savetxt(str(session_dir / "mfcc.csv"), mfcc_data, delimiter=",", fmt="%.6f")
 
             # Compute features for scoring
-            egemaps_mean = egemaps_data.mean(axis=0)
-            mfcc_mean = mfcc_data.mean(axis=0)
+            egemaps_data.mean(axis=0)
+            mfcc_data.mean(axis=0)
             egemaps_var = np.mean(np.std(egemaps_data, axis=0)) if egemaps_data.shape[0] > 1 else np.mean(np.abs(egemaps_data))
             mfcc_var = np.mean(np.std(mfcc_data, axis=0)) if mfcc_data.shape[0] > 1 else np.mean(np.abs(mfcc_data))
 
@@ -914,7 +911,7 @@ async def process_batch(
             confidence = len(modalities_used) / 3.0
 
             results.append(BatchResultItem(
-                participant_id=str(pid),
+                participant_id=pid,
                 status="completed",
                 phq8_score=round(score, 2),
                 severity=_severity_label(score),
@@ -927,7 +924,7 @@ async def process_batch(
         except Exception as e:
             logger.error(f"Batch processing failed for {pid}: {e}", exc_info=True)
             results.append(BatchResultItem(
-                participant_id=str(pid),
+                participant_id=pid,
                 status="failed",
                 error=str(e)[:200],
             ))

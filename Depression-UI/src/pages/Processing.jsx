@@ -321,7 +321,7 @@ export default function Processing() {
       if (navigateTimerRef.current)
         window.clearTimeout(navigateTimerRef.current);
     };
-  }, [latestAssessment.id, markCompletedSteps, navigate]);
+  }, [latestAssessment.id, markCompletedSteps, navigate, hasMultimodalReady, steps]);
 
   const openReport = () => {
     if (!isCompleted) return;

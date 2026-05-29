@@ -2,18 +2,16 @@
 
 import logging
 import random
-import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from config.settings import get_settings
 from database import init_db, async_session_factory

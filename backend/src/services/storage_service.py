@@ -16,7 +16,6 @@ The singleton is created once and reused for the life of the process.
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -25,7 +24,7 @@ from typing import Optional
 
 import aiofiles
 from fastapi import HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 logger = logging.getLogger("mindscope.storage")
 

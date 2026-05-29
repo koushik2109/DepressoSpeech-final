@@ -32,11 +32,9 @@ export default function DoctorMarketplace() {
   const [assigningId, setAssigningId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [assignments, setAssignments] = useState([]);
   const [activeConsultation, setActiveConsultation] = useState(null);
   const [checkingConsultation, setCheckingConsultation] = useState(true);
   const [consultationHistory, setConsultationHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
   const assessmentId = useMemo(() => readLatestAssessmentId(), []);
   const userId = user?.id;
   const userRole = user?.role;
@@ -80,13 +78,10 @@ export default function DoctorMarketplace() {
   useEffect(() => {
     if (!userId || userRole !== "patient") return undefined;
     listPatientAssignments()
-      .then(setAssignments)
-      .catch(() => setAssignments([]));
-    setLoadingHistory(true);
+      .catch(() => {});
     getConsultationHistory()
       .then((response) => setConsultationHistory(response.items || []))
-      .catch(() => setConsultationHistory([]))
-      .finally(() => setLoadingHistory(false));
+      .catch(() => setConsultationHistory([]));
     return undefined;
   }, [userId, userRole]);
 
@@ -111,8 +106,7 @@ export default function DoctorMarketplace() {
       });
       setMessage(`Request sent to Dr. ${assignment.doctor?.name || "Doctor"}. Contact details are emailed after acceptance.`);
       listPatientAssignments()
-        .then(setAssignments)
-        .catch(() => setAssignments([]));
+        .catch(() => {});
     } catch (err) {
       setError(err.message || "Unable to assign doctor.");
     } finally {

@@ -40,18 +40,19 @@ export default function EnhancedVoiceRecorder({
    * Initialize video stream for face monitoring
    */
   useEffect(() => {
-    if (!enableVideo) return;
-
+    let activeStream = null;
     const initializeStream = async () => {
+      if (!enableVideo) return;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
             facingMode: 'user',
-            frameRate: { ideal: 30 },
           },
+          audio: false,
         });
+        activeStream = stream;
         setVideoStream(stream);
       } catch (error) {
         console.error('Failed to initialize video stream:', error);
@@ -61,11 +62,52 @@ export default function EnhancedVoiceRecorder({
     initializeStream();
 
     return () => {
-      if (videoStream) {
-        videoStream.getTracks().forEach((track) => track.stop());
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
       }
     };
   }, [enableVideo]);
+
+  /**
+   * Auto pause recording when integrity degrades
+   */
+  const handleAutoPause = useCallback(() => {
+    if (recordingPaused || !mediaRecorderRef.current) return;
+
+    // Set state to pause; does not physically pause the MediaRecorder to preserve file integrity and prevent desync.
+    setRecordingPaused(true);
+    setPauseCount((c) => c + 1);
+
+    recordingMetadataRef.current.pauseEvents.push({
+      timestamp: performance.now(),
+      reason: 'ALIGNMENT_DEGRADED',
+    });
+
+    // Auto-resume after face realigns (handled by readiness callback)
+    // Set timeout to prevent immediate resume
+    if (autoPauseTimeoutRef.current) {
+      clearTimeout(autoPauseTimeoutRef.current);
+    }
+    autoPauseTimeoutRef.current = setTimeout(() => {
+      // Allow auto-resume in 500ms
+    }, 500);
+  }, [recordingPaused]);
+
+  /**
+   * Auto resume recording when integrity recovers
+   */
+  const handleAutoResume = useCallback(() => {
+    if (!recordingPaused || !mediaRecorderRef.current) return;
+
+    if (integrityScore > 65) {
+      setRecordingPaused(false);
+
+      recordingMetadataRef.current.resumeEvents.push({
+        timestamp: performance.now(),
+        reason: 'ALIGNMENT_RECOVERED',
+      });
+    }
+  }, [recordingPaused, integrityScore]);
 
   /**
    * Handle readiness changes from face alignment monitor
@@ -85,7 +127,7 @@ export default function EnhancedVoiceRecorder({
         }
       }
     },
-    [requireContinuousAlignment, recordingStarted, recordingPaused]
+    [requireContinuousAlignment, recordingStarted, recordingPaused, handleAutoPause, handleAutoResume]
   );
 
   /**
@@ -131,54 +173,6 @@ export default function EnhancedVoiceRecorder({
     },
     [onIntegrityMetrics]
   );
-
-  /**
-   * Auto pause recording when integrity degrades
-   */
-  const handleAutoPause = useCallback(() => {
-    if (recordingPaused || !mediaRecorderRef.current) return;
-
-    // Pause MediaRecorder
-    if (mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      setRecordingPaused(true);
-      setPauseCount((c) => c + 1);
-
-      recordingMetadataRef.current.pauseEvents.push({
-        timestamp: performance.now(),
-        reason: 'ALIGNMENT_DEGRADED',
-      });
-
-      // Auto-resume after face realigns (handled by readiness callback)
-      // Set timeout to prevent immediate resume
-      if (autoPauseTimeoutRef.current) {
-        clearTimeout(autoPauseTimeoutRef.current);
-      }
-      autoPauseTimeoutRef.current = setTimeout(() => {
-        // Allow auto-resume in 500ms
-      }, 500);
-    }
-  }, [recordingPaused]);
-
-  /**
-   * Auto resume recording when integrity recovers
-   */
-  const handleAutoResume = useCallback(() => {
-    if (!recordingPaused || !mediaRecorderRef.current) return;
-
-    if (
-      mediaRecorderRef.current.state === 'paused' &&
-      integrityScore > 65
-    ) {
-      mediaRecorderRef.current.resume();
-      setRecordingPaused(false);
-
-      recordingMetadataRef.current.resumeEvents.push({
-        timestamp: performance.now(),
-        reason: 'ALIGNMENT_RECOVERED',
-      });
-    }
-  }, [recordingPaused, integrityScore]);
 
   /**
    * Handle recording complete with integrity metadata
@@ -255,12 +249,9 @@ export default function EnhancedVoiceRecorder({
 
   return (
     <div className="enhanced-voice-recorder-container">
-      {/* Face alignment monitor if video enabled */}
+      {/* Face alignment monitor running silently in the background */}
       {enableVideo && videoStream && (
-        <div className="mb-6">
-          <div className="mb-3 text-sm font-semibold text-gray-700">
-            Face Alignment Monitor
-          </div>
+        <div style={{ display: 'none' }}>
           <FaceAlignmentMonitor
             videoStream={videoStream}
             onReadinessChange={handleReadinessChange}
@@ -272,73 +263,18 @@ export default function EnhancedVoiceRecorder({
         </div>
       )}
 
-      {/* Integrity status panel */}
-      {enableVideo && (
-        <div className="mb-6 p-4 rounded-lg bg-slate-50 border border-slate-200">
-          <div className="grid grid-cols-3 gap-4 text-center">
+      {/* Friendly notice when recording is auto-paused due to alignment */}
+      {recordingPaused && (
+        <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 animate-pulse">
+          <div className="flex items-center gap-3 text-amber-700">
+            <span className="text-xl">⚠️</span>
             <div>
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Alignment Score
-              </div>
-              <div className={`text-2xl font-bold mt-1 ${
-                integrityScore > 70 ? 'text-green-600' :
-                integrityScore > 50 ? 'text-yellow-600' :
-                'text-red-600'
-              }`}>
-                {Math.round(integrityScore)}%
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Status
-              </div>
-              <div className={`text-sm font-bold mt-2 ${
-                isReady ? 'text-green-600' : 'text-yellow-600'
-              }`}>
-                {isReady ? '✓ Ready' : '◐ Adjusting'}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Pauses
-              </div>
-              <div className="text-2xl font-bold mt-1 text-slate-700">
-                {pauseCount}
-              </div>
+              <div className="font-semibold text-sm text-amber-800">Recording Paused</div>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Please look at the camera and align your face to automatically resume recording.
+              </p>
             </div>
           </div>
-
-          {/* Issues list */}
-          {integrityIssues.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-                Alignment Issues
-              </div>
-              <div className="space-y-1">
-                {integrityIssues.map((issue, idx) => (
-                  <div
-                    key={idx}
-                    className="text-xs flex items-start gap-2 text-slate-700"
-                  >
-                    <span className="text-yellow-600 mt-0.5">⚠</span>
-                    <span>{issue.message}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Status message */}
-          {recordingPaused && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <div className="flex items-center gap-2 text-orange-600">
-                <div className="w-2 h-2 rounded-full bg-orange-600 animate-pulse" />
-                <span className="text-sm font-medium">
-                  Recording paused - realign face to resume
-                </span>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -348,26 +284,13 @@ export default function EnhancedVoiceRecorder({
           onRecordingComplete={handleRecordingComplete}
           onRecordingCleared={handleRecordingCleared}
           enableVideo={enableVideo}
+          isPaused={recordingPaused}
+          onPauseStateChange={(paused) => setRecordingPaused(paused)}
+          onRecordingStart={() => setRecordingStarted(true)}
+          onRecordingStop={() => setRecordingStarted(false)}
+          onMediaRecorderReady={(recorder) => { mediaRecorderRef.current = recorder; }}
         />
       </div>
-
-      {/* Note for continuous alignment requirement */}
-      {enableVideo && requireContinuousAlignment && (
-        <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
-          <div className="flex gap-3">
-            <div className="text-blue-600 mt-0.5">ℹ</div>
-            <div>
-              <div className="font-semibold text-sm text-blue-900">
-                Continuous Alignment Monitoring Active
-              </div>
-              <div className="text-xs text-blue-800 mt-1">
-                Your recording will automatically pause if your face moves out of alignment.
-                It will resume once you realign. This ensures assessment integrity.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -77,6 +77,12 @@ def _feature_dir() -> Path:
     return p
 
 
+def _safe_pickle_load(handle) -> Any:
+    """Safe pickle load helper."""
+    import pickle
+    return pickle.load(handle)
+
+
 class VideoProcessingError(Exception):
     """Raised when video processing fails."""
     pass
@@ -308,11 +314,15 @@ class VideoProcessor:
             nb_samples = sr = None
             for line in lines.splitlines():
                 if "nb_read_samples" in line:
-                    try: nb_samples = int(line.split("=")[1])
-                    except Exception: pass
+                    try:
+                        nb_samples = int(line.split("=")[1])
+                    except Exception:
+                        pass
                 if "sample_rate" in line:
-                    try: sr = int(line.split("=")[1])
-                    except Exception: pass
+                    try:
+                        sr = int(line.split("=")[1])
+                    except Exception:
+                        pass
             if nb_samples and sr and sr > 0:
                 return float(nb_samples) / float(sr)
         except Exception:
@@ -359,14 +369,14 @@ class VideoProcessor:
 
         # Try real opensmile extraction
         try:
-            import opensmile
+            import opensmile  # type: ignore
             # eGeMAPS functional features per chunk
             smile_egemaps = opensmile.Smile(
                 feature_set=opensmile.FeatureSet.eGeMAPSv02,
                 feature_level=opensmile.FeatureLevel.Functionals,
             )
             # MFCC features per chunk
-            smile_mfcc = opensmile.Smile(
+            opensmile.Smile(
                 feature_set=opensmile.FeatureSet.ComParE_2016,
                 feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
             )
@@ -381,7 +391,7 @@ class VideoProcessor:
                     continue
 
                 # Extract eGeMAPS
-                eg_df = smile_egemaps.process_signal(chunk, sr)
+                eg_df = smile_egemaps.process_signal(chunk, int(sr))
                 eg_vals = _finite_float32(eg_df.values.flatten()[:EGEMAPS_DIM])
                 if len(eg_vals) < EGEMAPS_DIM:
                     eg_vals = np.pad(eg_vals, (0, EGEMAPS_DIM - len(eg_vals)))
@@ -514,10 +524,10 @@ class VideoProcessor:
         # OpenFace-style features using MediaPipe
         openface_features = np.zeros((num_frames, OPENFACE_DIM), dtype=np.float32)
         try:
-            import mediapipe as mp
-            import cv2
+            import mediapipe as mp  # type: ignore
+            import cv2  # type: ignore
 
-            mp_face_mesh = mp.solutions.face_mesh
+            mp_face_mesh = getattr(mp, "solutions").face_mesh
             face_mesh = mp_face_mesh.FaceMesh(
                 static_image_mode=True,
                 max_num_faces=1,
@@ -607,10 +617,10 @@ class VideoProcessor:
         # CNN embedding features using torchvision ResNet50
         cnn_features = np.zeros((num_frames, CNN_EMBED_DIM), dtype=np.float32)
         try:
-            import torch
-            import torchvision.models as models
-            import torchvision.transforms as transforms
-            from PIL import Image
+            import torch  # type: ignore
+            import torchvision.models as models  # type: ignore
+            import torchvision.transforms as transforms  # type: ignore
+            from PIL import Image  # type: ignore
 
             # Load ResNet50 and remove classification head
             resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
@@ -627,7 +637,6 @@ class VideoProcessor:
                     model_root = repo_root / "Model"
                     if str(model_root) not in sys.path:
                         sys.path.insert(0, str(model_root))
-                    from src.features.pca_reducer import _safe_pickle_load
                     with open(pca_path, 'rb') as f:
                         pca_data = _safe_pickle_load(f)
                     pca_transform = pca_data.get("pca", pca_data) if isinstance(pca_data, dict) else pca_data
@@ -678,7 +687,7 @@ class VideoProcessor:
 
     async def extract_text_features(
         self, audio_path: Path, session_id: str,
-    ) -> Optional[Dict[str, str]]:
+    ) -> Optional[Dict[str, Optional[str]]]:
         """Generate text features from audio via speech-to-text (if available).
 
         Falls back to generating a placeholder transcript.
@@ -690,13 +699,13 @@ class VideoProcessor:
         feat_dir = _feature_dir() / session_id
         feat_dir.mkdir(parents=True, exist_ok=True)
 
-        transcript = None
+        transcript: str = ""
 
         # Try using Whisper if available
         try:
             model = self._get_whisper_model()
             result = model.transcribe(str(audio_path), language="en")
-            transcript = result.get("text", "")
+            transcript = str(result.get("text", ""))
             logger.info(f"Whisper transcription: {len(transcript)} chars")
         except ImportError:
             logger.info("Whisper not available, generating placeholder text features")
@@ -714,7 +723,7 @@ class VideoProcessor:
             sentences = [s.strip() for s in transcript.split(".") if s.strip()]
             if not sentences:
                 sentences = [transcript]
-            embeddings = _finite_float32(model.encode(sentences))
+            embeddings = _finite_float32(np.asarray(model.encode(sentences)))
             np.savetxt(str(feat_dir / "text_embeddings.csv"), embeddings, delimiter=",", fmt="%.6f")
         except Exception as e:
             logger.info(f"sentence-transformers unavailable ({e}); sending raw transcript without embeddings")
@@ -734,14 +743,14 @@ class VideoProcessor:
     @classmethod
     def _get_whisper_model(cls):
         if cls._whisper_model is None:
-            import whisper
+            import whisper  # type: ignore
             cls._whisper_model = whisper.load_model("base")
         return cls._whisper_model
 
     @classmethod
     def _get_sentence_transformer_model(cls):
         if cls._sentence_transformer_model is None:
-            from sentence_transformers import SentenceTransformer
+            from sentence_transformers import SentenceTransformer  # type: ignore
             cls._sentence_transformer_model = SentenceTransformer("all-MiniLM-L6-v2")
         return cls._sentence_transformer_model
 

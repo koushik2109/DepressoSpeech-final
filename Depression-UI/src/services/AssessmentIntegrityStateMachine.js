@@ -110,9 +110,9 @@ class AssessmentIntegrityStateMachine {
         break;
 
       case 'READY':
-        // Transition back to INITIALIZING immediately when face is lost
-        // User must have continuous face presence to remain ready
-        if (!detected) {
+        // User must have lost face presence continuously before reverting to INITIALIZING.
+        // Tolerates brief fluctuations/glitches and prevents overlay flickers.
+        if (this.faceLostCount > this.constants.FACE_LOST_TOLERANCE) {
           this.transitionTo('INITIALIZING');
         }
         break;

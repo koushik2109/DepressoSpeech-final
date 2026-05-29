@@ -28,7 +28,7 @@ def _send_smtp(to_email: str, msg: MIMEMultipart) -> bool:
     Uses SMTP_SSL (port 465) by default which works on Render's infrastructure.
     Falls back to STARTTLS (port 587) when SMTP_PORT is explicitly set to 587.
     """
-    port = int(settings.SMTP_PORT or 465)
+    port = settings.SMTP_PORT or 465
     try:
         if port == 465:
             with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=8) as server:

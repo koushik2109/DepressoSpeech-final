@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     Column,
@@ -34,30 +35,30 @@ def _uuid():
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    role = Column(String(16), nullable=False)  # patient | doctor | admin
-    name = Column(String(120), nullable=False)
-    email = Column(String(255), nullable=False, unique=True, index=True)
-    password_hash = Column(Text, nullable=False)
+    id: Any = Column(String(36), primary_key=True, default=_uuid)
+    role: Any = Column(String(16), nullable=False)  # patient | doctor | admin
+    name: Any = Column(String(120), nullable=False)
+    email: Any = Column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Any = Column(Text, nullable=False)
 
     # Patient fields
-    age = Column(SmallInteger, nullable=True)
-    basic_info = Column(Text, nullable=True)
+    age: Any = Column(SmallInteger, nullable=True)
+    basic_info: Any = Column(Text, nullable=True)
 
     # Doctor fields
-    specialization = Column(String(120), nullable=True)
-    license_number = Column(String(80), nullable=True)
-    clinic_name = Column(String(160), nullable=True)
-    years_experience = Column(SmallInteger, nullable=True)
+    specialization: Any = Column(String(120), nullable=True)
+    license_number: Any = Column(String(80), nullable=True)
+    clinic_name: Any = Column(String(160), nullable=True)
+    years_experience: Any = Column(SmallInteger, nullable=True)
 
     # Email verification
-    is_verified = Column(Boolean, default=False)
-    verification_otp = Column(String(6), nullable=True)
-    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    is_verified: Any = Column(Boolean, default=False)
+    verification_otp: Any = Column(String(6), nullable=True)
+    otp_expires_at: Any = Column(DateTime(timezone=True), nullable=True)
 
-    status = Column(String(16), default="active")
-    created_at = Column(DateTime(timezone=True), default=_utcnow)
-    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    status: Any = Column(String(16), default="active")
+    created_at: Any = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Any = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
     assessments = relationship("Assessment", back_populates="user", lazy="selectin")
     media_files = relationship("MediaFile", back_populates="owner", lazy="selectin")
@@ -277,14 +278,14 @@ class RequestMetric(Base):
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
-    id = Column(String(36), primary_key=True, default=_uuid)
+    id: Any = Column(String(36), primary_key=True, default=_uuid)
     # Plain string — no FK so it can reference assessments OR multimodal_sessions
-    assessment_id = Column(String(36), nullable=True, index=True)
-    job_type = Column(String(32), default="inference")
-    status = Column(String(16), default="queued")  # queued | running | succeeded | failed
-    progress_pct = Column(SmallInteger, default=0)
-    stage = Column(String(64), nullable=True)
-    error_message = Column(Text, nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    assessment_id: Any = Column(String(36), nullable=True, index=True)
+    job_type: Any = Column(String(32), default="inference")
+    status: Any = Column(String(16), default="queued")  # queued | running | succeeded | failed
+    progress_pct: Any = Column(SmallInteger, default=0)
+    stage: Any = Column(String(64), nullable=True)
+    error_message: Any = Column(Text, nullable=True)
+    started_at: Any = Column(DateTime(timezone=True), nullable=True)
+    finished_at: Any = Column(DateTime(timezone=True), nullable=True)
+    created_at: Any = Column(DateTime(timezone=True), default=_utcnow)

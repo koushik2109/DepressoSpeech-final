@@ -1,3 +1,4 @@
+/* global describe, test, expect, beforeEach */
 /**
  * Test Suite for Assessment Integrity Monitoring
  * 
@@ -43,8 +44,7 @@ describe('FaceDetectionService', () => {
   });
 
   test('calculates face geometry correctly', async () => {
-    // Mock landmarks (468 face mesh points)
-    const mockLandmarks = Array.from({ length: 468 }, (_, i) => ({
+    const mockLandmarks = Array.from({ length: 468 }, () => ({
       x: 0.5,
       y: 0.5,
       z: 0,
@@ -114,7 +114,7 @@ describe('QualityAnalyzer', () => {
     ctx.fillRect(50, 0, 50, 100);
 
     const imageData = ctx.getImageData(0, 0, 100, 100);
-    const blur = analyzer.calculateBlur(imageData, 100, 100);
+    const blur = analyzer.calculateBlur(imageData);
 
     // Non-blurry image should have high variance
     expect(blur).toBeGreaterThan(100);
@@ -384,8 +384,6 @@ describe('Integrity Monitoring Integration', () => {
     const serviceReady = await FaceDetectionService.initialize();
     expect(serviceReady).toBe(true);
 
-    // Create components
-    const analyzer = new QualityAnalyzer();
     const stateMachine = new AssessmentIntegrityStateMachine();
 
     // Simulate camera input
