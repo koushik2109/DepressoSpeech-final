@@ -28,7 +28,7 @@ REM Configuration
 set "SCRIPT_DIR=%~dp0"
 set "FRONTEND_DIR=%SCRIPT_DIR%Depression-UI"
 set "BACKEND_DIR=%SCRIPT_DIR%backend"
-set "MODEL_DIR=%SCRIPT_DIR%Model"
+set "MODEL_DIR=%SCRIPT_DIR%ModelV2"
 set "SWAGGER_DIR=%SCRIPT_DIR%swagger"
 
 set FRONTEND_PORT=5173

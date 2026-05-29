@@ -149,6 +149,49 @@ check_python() {
     return 0
 }
 
+# Function to check and start PostgreSQL
+check_postgres() {
+    print_header "Checking PostgreSQL"
+
+    # Ensure the service is running
+    if command -v pg_isready &> /dev/null; then
+        if pg_isready -h 127.0.0.1 -p 5432 -q 2>/dev/null; then
+            print_success "PostgreSQL is running on 127.0.0.1:5432"
+            return 0
+        fi
+    fi
+
+    # Try to start via systemctl (Ubuntu / Debian)
+    if command -v systemctl &> /dev/null && systemctl list-units --type=service | grep -q postgresql; then
+        print_info "Starting PostgreSQL service..."
+        sudo systemctl start postgresql 2>/dev/null || true
+        sleep 2
+        if pg_isready -h 127.0.0.1 -p 5432 -q 2>/dev/null; then
+            print_success "PostgreSQL started successfully"
+            return 0
+        fi
+    fi
+
+    # Try pg_ctlcluster (Ubuntu multi-version setup)
+    if command -v pg_ctlcluster &> /dev/null; then
+        PG_VER=$(ls /etc/postgresql/ 2>/dev/null | sort -V | tail -1)
+        if [ -n "$PG_VER" ]; then
+            print_info "Trying pg_ctlcluster $PG_VER main start..."
+            sudo pg_ctlcluster "$PG_VER" main start 2>/dev/null || true
+            sleep 2
+        fi
+    fi
+
+    if pg_isready -h 127.0.0.1 -p 5432 -q 2>/dev/null; then
+        print_success "PostgreSQL is now running"
+        return 0
+    fi
+
+    print_error "Could not start PostgreSQL — backend may fail to connect."
+    print_error "Run: sudo systemctl start postgresql"
+    return 1
+}
+
 # Function to install npm dependencies
 install_npm_deps() {
     print_header "Installing Frontend Dependencies (npm)"
@@ -163,17 +206,26 @@ install_npm_deps() {
     fi
 }
 
-# Function to install Python dependencies for Backend
+# Function to install Python dependencies for Backend (uses backend venv)
 install_backend_deps() {
-    print_header "Installing Backend Dependencies (pip)"
+    print_header "Installing Backend Dependencies (pip into .venv)"
 
-    # Check if already installed (simple check using pip show)
-    if pip show fastapi > /dev/null 2>&1; then
+    local PIP_CMD="pip3"
+    if [ -f "$BACKEND_DIR/.venv/bin/pip" ]; then
+        PIP_CMD="$BACKEND_DIR/.venv/bin/pip"
+    else
+        # Create the venv if it doesn't exist
+        print_info "Creating backend virtual environment..."
+        python3 -m venv "$BACKEND_DIR/.venv"
+        PIP_CMD="$BACKEND_DIR/.venv/bin/pip"
+    fi
+
+    if $PIP_CMD show fastapi > /dev/null 2>&1; then
         print_success "Backend dependencies already installed"
     else
         cd "$BACKEND_DIR"
-        print_info "Running: pip install -r requirements.txt"
-        pip install -r requirements.txt
+        print_info "Running: pip install -r requirements.txt (in backend .venv)"
+        $PIP_CMD install -r requirements.txt
         print_success "Backend dependencies installed"
         cd "$SCRIPT_DIR"
     fi
@@ -215,15 +267,27 @@ start_frontend() {
 start_backend() {
     print_header "Starting Backend (FastAPI - MindScope)"
     print_info "Backend will run on: http://localhost:$BACKEND_PORT"
-    (cd "$BACKEND_DIR" && python3 -m uvicorn main:app --host 0.0.0.0 --port $BACKEND_PORT --reload > /tmp/backend.log 2>&1) &
+
+    # Prefer the local venv created inside the backend dir
+    local UVICORN_CMD
+    if [ -f "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
+        print_info "Using backend venv: $BACKEND_DIR/.venv"
+        UVICORN_CMD="$BACKEND_DIR/.venv/bin/uvicorn"
+    else
+        print_info "No backend venv found, falling back to system python3"
+        UVICORN_CMD="python3 -m uvicorn"
+    fi
+
+    (cd "$BACKEND_DIR" && $UVICORN_CMD main:app --host 0.0.0.0 --port $BACKEND_PORT --reload > /tmp/backend.log 2>&1) &
     BACKEND_PID=$!
-    sleep 2
+    sleep 3
 }
 
 # Function to start model server (activates Model venv)
 start_model() {
     print_header "Starting ML Model Server (DepressoSpeech API)"
     print_info "ML Model Server will run on: http://localhost:$MODEL_PORT"
+    print_info "Note: first startup may take longer while sentence-transformers models are downloaded."
 
     if [ -f "$MODEL_DIR/.venv/bin/activate" ]; then
         print_info "Activating Model virtual environment..."
@@ -233,7 +297,7 @@ start_model() {
         (cd "$MODEL_DIR" && python3 scripts/serve.py --port $MODEL_PORT > /tmp/model_serve.log 2>&1) &
     fi
     MODEL_PID=$!
-    sleep 5
+    sleep 10
 }
 
 # Function to start swagger docs server
@@ -250,7 +314,7 @@ check_service_status() {
     local service=$1
     local port=$2
     local log_file=$3
-    local retries=5
+    local retries=12
 
     for i in $(seq 1 $retries); do
         if is_port_in_use $port; then
@@ -304,6 +368,19 @@ show_final_status() {
     echo -e "Swagger:   /tmp/swagger.log"
 
     echo ""
+    print_header "Database (PostgreSQL)"
+    echo -e "${GREEN}Host:         ${NC}127.0.0.1:5432"
+    echo -e "${GREEN}Database:     ${NC}mindscope"
+    echo -e "${GREEN}User:         ${NC}mindscope"
+    echo -e "${GREEN}Type:         ${NC}PostgreSQL 16 (asyncpg driver)"
+    echo -e "${GREEN}File storage: ${NC}BYTEA (audio/video stored in media_file_data table)"
+    echo -e "${GREEN}Tables:       ${NC}users, doctors, assessments, media_files, media_file_data, etc."
+    echo ""
+    echo -e "${YELLOW}To inspect the database:${NC}"
+    echo -e "  psql -h 127.0.0.1 -U mindscope -d mindscope"
+    echo -e "  SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+
+    echo ""
     echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 }
 
@@ -344,6 +421,7 @@ set +e
 print_header "Checking Prerequisites"
 check_nodejs || exit 1
 check_python || exit 1
+check_postgres || true   # Non-fatal: warn but proceed
 
 # Install dependencies if needed
 if [ "$INSTALL_DEPS" = true ]; then

@@ -1,5 +1,6 @@
 """Authentication routes: register, login, admin login, logout, me, OTP verification."""
 
+import logging
 import secrets
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ from config.settings import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+logger = logging.getLogger("mindscope.auth")
 
 # ── OTP rate limiting (in-memory, resets on restart) ───
 _otp_attempts: dict = defaultdict(list)  # email -> [timestamps]
@@ -221,7 +223,12 @@ async def resend_otp(body: ResendOtpRequest, db: AsyncSession = Depends(get_db))
 
     sent = await send_otp_email_async(to_email=user.email, otp=otp, user_name=user.name)
     if not sent:
-        raise HTTPException(status_code=500, detail="Failed to send OTP email. Please try again.")
+        # Email failed (SMTP blocked on this network) — log OTP to server console
+        # so admins/devs can relay it manually. Never block the user.
+        logger.warning(
+            f"[OTP-FALLBACK] Email delivery failed for {user.email}. "
+            f"OTP={otp} (expires in {settings.OTP_EXPIRE_MINUTES} min)"
+        )
 
     return {
         "success": True,
