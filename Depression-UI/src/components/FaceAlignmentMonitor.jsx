@@ -72,16 +72,16 @@ const FaceAlignmentMonitor = ({
     (stream) => {
       if (!stream) return;
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-
       const processFrame = () => {
         if (!mountedRef.current) return;
 
+        const video = videoRef.current;
+
         if (
-          !videoRef.current ||
-          videoRef.current.paused ||
+          !video ||
+          video.paused ||
+          video.readyState < 2 ||           // HAVE_CURRENT_DATA or better
+          video.videoWidth === 0 ||
           !FaceDetectionService.isInitialized() ||
           isProcessingRef.current
         ) {
@@ -92,33 +92,26 @@ const FaceAlignmentMonitor = ({
         isProcessingRef.current = true;
 
         try {
-          // Draw video frame to canvas
-          canvas.width = videoRef.current.videoWidth || 640;
-          canvas.height = videoRef.current.videoHeight || 480;
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
-          // Detect face
-          const detectionResult = FaceDetectionService.detectFace(canvas);
+          // Pass the video element DIRECTLY — MediaPipe VIDEO mode requires
+          // an HTMLVideoElement for detectForVideo to track faces across frames.
+          // Drawing to canvas first strips the timing context and breaks tracking.
+          const detectionResult = FaceDetectionService.detectFace(video);
           if (!detectionResult) {
             isProcessingRef.current = false;
             animationFrameRef.current = requestAnimationFrame(processFrame);
             return;
           }
 
-          // Update state machine with simplified data
+          // Update state machine
           const result = stateMachineRef.current.update(
             detectionResult,
             { qualityScore: detectionResult.detected ? 80 : 0 }
           );
 
-          // Draw simple overlays
-          drawOverlays(
-            overlayCanvasRef.current,
-            canvas.width,
-            canvas.height,
-            detectionResult,
-            result
-          );
+          // Draw overlays onto overlay canvas (sized to match video)
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 480;
+          drawOverlays(overlayCanvasRef.current, w, h, detectionResult, result);
 
           // Update UI state
           if (mountedRef.current) {
