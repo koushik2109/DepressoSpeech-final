@@ -21,7 +21,7 @@ const FaceDetectionService = (() => {
   /* ─── Configuration ──────────────────────────────────── */
   const CONFIG = {
     maxFaces: 2, // Detect up to 2 so we can reject multi-face
-    confidenceThreshold: 0.4,
+    confidenceThreshold: 0.1, // Lowered from 0.4 to detect faces in shadowed/backlit settings
     centerZone: { minX: 0.15, maxX: 0.85, minY: 0.1, maxY: 0.9 },
     minFaceAreaRatio: 0.015, // Face must occupy at least 1.5% of frame
     maxFaceAreaRatio: 0.92,  // Face must not fill >92% (too close)
@@ -44,7 +44,7 @@ const FaceDetectionService = (() => {
         numFaces: CONFIG.maxFaces,
         minFaceDetectionConfidence: CONFIG.confidenceThreshold,
         minFacePresenceConfidence: CONFIG.confidenceThreshold,
-        minTrackingConfidence: 0.5,
+        minTrackingConfidence: CONFIG.confidenceThreshold,
         outputFaceBlendshapes: false,
         outputFacialTransformationMatrixes: false,
       };
@@ -52,19 +52,25 @@ const FaceDetectionService = (() => {
       const MODEL_URL =
         'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
-      // Use CPU delegate by default — GPU WebGL delegate silently returns
-      // zero landmarks on Linux/VM/headless-GPU environments even when a face
-      // is clearly visible.  CPU is ~5% slower but 100% reliable everywhere.
-      const delegate = 'CPU';
-
-      faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-        ...commonOptions,
-        baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      });
+      // Dynamically select delegate: try GPU first for buttery-smooth performance, fallback to CPU on VM/headless setups.
+      let delegate = 'GPU';
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+          ...commonOptions,
+          baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
+        });
+        console.log('[FaceDetectionService] Initialized with delegate=GPU');
+      } catch (gpuError) {
+        console.warn('[FaceDetectionService] GPU delegate failed, falling back to CPU:', gpuError);
+        delegate = 'CPU';
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+          ...commonOptions,
+          baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
+        });
+        console.log('[FaceDetectionService] Initialized with delegate=CPU (fallback)');
+      }
 
       initialized = true;
-      console.log(`[FaceDetectionService] Initialized with delegate=${delegate}`);
-
       return true;
     } catch (error) {
       console.error('[FaceDetectionService] Initialization failed:', error);
