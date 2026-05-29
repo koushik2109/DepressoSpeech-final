@@ -44,3 +44,11 @@ MULTIMODAL_FIX_REPORT.txt
 result.json
 Depression Severity Prediction Design Document.pdf
 Depression Severity Prediction Prd (audio + Text, E Ge Maps + Mfcc, Mlp+lstm).pdf
+*aux
+*out
+*pdf
+*tex
+*fdb_latexmk
+*fls
+*log
+*md

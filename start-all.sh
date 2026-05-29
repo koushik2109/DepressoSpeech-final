@@ -278,7 +278,7 @@ start_backend() {
         UVICORN_CMD="python3 -m uvicorn"
     fi
 
-    (cd "$BACKEND_DIR" && $UVICORN_CMD main:app --host 0.0.0.0 --port $BACKEND_PORT --reload > /tmp/backend.log 2>&1) &
+    (cd "$BACKEND_DIR" && ML_MODEL_URL="http://localhost:$MODEL_PORT" $UVICORN_CMD main:app --host 0.0.0.0 --port $BACKEND_PORT --reload > /tmp/backend.log 2>&1) &
     BACKEND_PID=$!
     sleep 3
 }

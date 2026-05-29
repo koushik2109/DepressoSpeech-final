@@ -10,17 +10,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
+# pyrefly: ignore [missing-import]
 from database import get_db
+# pyrefly: ignore [missing-import]
 from src.models import Doctor, User
+# pyrefly: ignore [missing-import]
 from src.utils.auth import (
     hash_password,
     verify_password,
     create_access_token,
     create_refresh_token,
-    decode_token,
 )
+# pyrefly: ignore [missing-import]
 from src.middleware.deps import get_current_user
-from src.services.email_service import generate_otp, send_otp_email, send_otp_email_async
+# pyrefly: ignore [missing-import]
+from src.services.email_service import generate_otp, send_otp_email_async
+# pyrefly: ignore [missing-import]
 from config.settings import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -180,7 +185,7 @@ async def verify_otp(body: VerifyOtpRequest, db: AsyncSession = Depends(get_db))
     if user.otp_expires_at:
         expire_dt = user.otp_expires_at
         now_dt = datetime.now(timezone.utc)
-        # SQLite returns naive datetimes — normalize for comparison
+        # asyncpg (PostgreSQL) returns tz-aware datetimes; normalize if naive
         if expire_dt.tzinfo is None:
             now_dt = now_dt.replace(tzinfo=None)
         if now_dt > expire_dt:
@@ -300,6 +305,13 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     if user.status != "active":
         raise HTTPException(status_code=423, detail="Account is locked.")
 
+    # Block login until email is verified (Google OAuth users are pre-verified)
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Email not verified. Please check your inbox for the OTP.",
+        )
+
     tokens = _issue_tokens(user)
     return {
         **tokens,
@@ -311,6 +323,10 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/admin/login")
 async def admin_login(body: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
+    # Guard: secrets.compare_digest requires non-None strings
+    if not settings.ADMIN_DEFAULT_EMAIL or not settings.ADMIN_DEFAULT_PASSWORD:
+        raise HTTPException(status_code=503, detail="Admin credentials not configured.")
+
     # Check against default admin account first
     if secrets.compare_digest(body.adminId, settings.ADMIN_DEFAULT_EMAIL) and secrets.compare_digest(body.password, settings.ADMIN_DEFAULT_PASSWORD):
         # Find or create admin user

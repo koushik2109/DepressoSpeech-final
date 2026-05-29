@@ -92,10 +92,31 @@ const FaceAlignmentMonitor = ({
         isProcessingRef.current = true;
 
         try {
-          // Pass the video element DIRECTLY — MediaPipe VIDEO mode requires
-          // an HTMLVideoElement for detectForVideo to track faces across frames.
-          // Drawing to canvas first strips the timing context and breaks tracking.
-          const detectionResult = FaceDetectionService.detectFace(video);
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            isProcessingRef.current = false;
+            animationFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            isProcessingRef.current = false;
+            animationFrameRef.current = requestAnimationFrame(processFrame);
+            return;
+          }
+
+          // Size the hidden canvas to match the video frame dimensions
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 480;
+          canvas.width = w;
+          canvas.height = h;
+
+          // Draw the decoded video frame to the 2D canvas context
+          ctx.drawImage(video, 0, 0, w, h);
+
+          // Pass the canvas (with decoded pixels) to the face detection service
+          const detectionResult = FaceDetectionService.detectFace(canvas);
           if (!detectionResult) {
             isProcessingRef.current = false;
             animationFrameRef.current = requestAnimationFrame(processFrame);

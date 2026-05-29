@@ -1,0 +1,1833 @@
+{
+  "source_checkpoint": "checkpoints/best_model.pt",
+  "source_config": "result.json / configs/training.yaml",
+  "training_log": "logs_v4/runs/multimodal_v4_20260518_174328/training.log",
+  "model_params": 91817,
+  "best_epoch_from_log": {
+    "epoch": 124,
+    "train_loss": 10.8176,
+    "val_loss": 22.8765,
+    "val_ccc": 0.5458,
+    "val_rmse": 5.2614,
+    "gate_audio": 0.28,
+    "gate_video": 0.31,
+    "gate_text": 0.41
+  },
+  "model_config": {
+    "audio_dim": 33,
+    "video_dim": 40,
+    "text_dim": 163,
+    "dropout": 0.45,
+    "encoder_type": "conv_gru",
+    "fusion_dim": 32,
+    "fusion_mode": "hybrid",
+    "modality_dropout": 0.2,
+    "num_heads": 4,
+    "num_layers": 1,
+    "num_questions": 8
+  },
+  "preprocessor_output_dims": {
+    "audio": 33,
+    "video": 40,
+    "text": 163
+  },
+  "splits": {
+    "train": {
+      "n": 163,
+      "regression": {
+        "ccc": 0.8913717794805137,
+        "rmse": 3.392690121876845,
+        "mae": 2.9358378681668476
+      },
+      "binary_from_regression_phq10": {
+        "tp": 47,
+        "tn": 111,
+        "fp": 2,
+        "fn": 3,
+        "precision": 0.9591836734693877,
+        "recall": 0.94,
+        "f1": 0.9494949494949495,
+        "accuracy": 0.9693251533742331,
+        "positives": 50,
+        "n": 163
+      },
+      "classification_head_threshold_0_5": {
+        "tp": 35,
+        "tn": 118,
+        "fp": 8,
+        "fn": 2,
+        "precision": 0.813953488372093,
+        "recall": 0.9459459459459459,
+        "f1": 0.875,
+        "accuracy": 0.9386503067484663,
+        "positives": 37,
+        "n": 163
+      },
+      "mean_gate_weights": {
+        "audio": 0.23996275663375854,
+        "video": 0.2662637531757355,
+        "text": 0.4937734305858612
+      },
+      "std_gate_weights": {
+        "audio": 0.052370741963386536,
+        "video": 0.06537897884845734,
+        "text": 0.10906598716974258
+      },
+      "mean_modality_confidence": {
+        "audio": 0.0037626444827765226,
+        "video": 0.005447882227599621,
+        "text": 8.1311500252923e-06
+      },
+      "predictions": [
+        {
+          "participant_id": "302",
+          "true": 4.0,
+          "pred": -0.25920772552490234,
+          "classification_prob": 0.004966783802956343
+        },
+        {
+          "participant_id": "303",
+          "true": 0.0,
+          "pred": -2.7089433670043945,
+          "classification_prob": 0.006386889610439539
+        },
+        {
+          "participant_id": "304",
+          "true": 6.0,
+          "pred": 7.368867874145508,
+          "classification_prob": 0.07755636423826218
+        },
+        {
+          "participant_id": "305",
+          "true": 7.0,
+          "pred": 7.495923042297363,
+          "classification_prob": 0.08268244564533234
+        },
+        {
+          "participant_id": "307",
+          "true": 4.0,
+          "pred": -1.386732816696167,
+          "classification_prob": 0.00432345038279891
+        },
+        {
+          "participant_id": "308",
+          "true": 22.0,
+          "pred": 17.757186889648438,
+          "classification_prob": 0.8678215742111206
+        },
+        {
+          "participant_id": "309",
+          "true": 15.0,
+          "pred": 17.62354278564453,
+          "classification_prob": 0.8615789413452148
+        },
+        {
+          "participant_id": "310",
+          "true": 4.0,
+          "pred": -2.29110050201416,
+          "classification_prob": 0.0045130071230232716
+        },
+        {
+          "participant_id": "311",
+          "true": 21.0,
+          "pred": 17.77741241455078,
+          "classification_prob": 0.8757743239402771
+        },
+        {
+          "participant_id": "312",
+          "true": 2.0,
+          "pred": -2.155763864517212,
+          "classification_prob": 0.004548090975731611
+        },
+        {
+          "participant_id": "313",
+          "true": 7.0,
+          "pred": 7.003776550292969,
+          "classification_prob": 0.07060864567756653
+        },
+        {
+          "participant_id": "314",
+          "true": 1.0,
+          "pred": -2.54567551612854,
+          "classification_prob": 0.005674431566148996
+        },
+        {
+          "participant_id": "315",
+          "true": 2.0,
+          "pred": -2.238450527191162,
+          "classification_prob": 0.004639986902475357
+        },
+        {
+          "participant_id": "316",
+          "true": 6.0,
+          "pred": 6.799847602844238,
+          "classification_prob": 0.05666477605700493
+        },
+        {
+          "participant_id": "318",
+          "true": 3.0,
+          "pred": -0.5752317905426025,
+          "classification_prob": 0.0045671542175114155
+        },
+        {
+          "participant_id": "319",
+          "true": 13.0,
+          "pred": 17.534870147705078,
+          "classification_prob": 0.853213369846344
+        },
+        {
+          "participant_id": "322",
+          "true": 5.0,
+          "pred": 5.637960433959961,
+          "classification_prob": 0.03798076510429382
+        },
+        {
+          "participant_id": "323",
+          "true": 1.0,
+          "pred": -2.337202548980713,
+          "classification_prob": 0.004437833558768034
+        },
+        {
+          "participant_id": "324",
+          "true": 5.0,
+          "pred": 6.765332221984863,
+          "classification_prob": 0.06384553015232086
+        },
+        {
+          "participant_id": "325",
+          "true": 10.0,
+          "pred": 12.626225471496582,
+          "classification_prob": 0.528221070766449
+        },
+        {
+          "participant_id": "326",
+          "true": 2.0,
+          "pred": -2.367515802383423,
+          "classification_prob": 0.004716857802122831
+        },
+        {
+          "participant_id": "327",
+          "true": 4.0,
+          "pred": -1.4237189292907715,
+          "classification_prob": 0.00428922800347209
+        },
+        {
+          "participant_id": "328",
+          "true": 4.0,
+          "pred": 2.311061143875122,
+          "classification_prob": 0.009274398908019066
+        },
+        {
+          "participant_id": "329",
+          "true": 1.0,
+          "pred": -2.414703130722046,
+          "classification_prob": 0.005229248199611902
+        },
+        {
+          "participant_id": "330",
+          "true": 12.0,
+          "pred": 17.730180740356445,
+          "classification_prob": 0.8570834994316101
+        },
+        {
+          "participant_id": "332",
+          "true": 18.0,
+          "pred": 17.728227615356445,
+          "classification_prob": 0.870625913143158
+        },
+        {
+          "participant_id": "333",
+          "true": 5.0,
+          "pred": 7.125364303588867,
+          "classification_prob": 0.07010407000780106
+        },
+        {
+          "participant_id": "335",
+          "true": 12.0,
+          "pred": 17.506725311279297,
+          "classification_prob": 0.861478328704834
+        },
+        {
+          "participant_id": "337",
+          "true": 10.0,
+          "pred": 10.074028015136719,
+          "classification_prob": 0.20053398609161377
+        },
+        {
+          "participant_id": "338",
+          "true": 15.0,
+          "pred": 17.764511108398438,
+          "classification_prob": 0.8723331689834595
+        },
+        {
+          "participant_id": "339",
+          "true": 11.0,
+          "pred": 16.824373245239258,
+          "classification_prob": 0.8191056251525879
+        },
+        {
+          "participant_id": "340",
+          "true": 1.0,
+          "pred": -2.619163990020752,
+          "classification_prob": 0.005090345628559589
+        },
+        {
+          "participant_id": "341",
+          "true": 7.0,
+          "pred": 7.6843109130859375,
+          "classification_prob": 0.09156357496976852
+        },
+        {
+          "participant_id": "345",
+          "true": 15.0,
+          "pred": 17.72300148010254,
+          "classification_prob": 0.8738987445831299
+        },
+        {
+          "participant_id": "346",
+          "true": 23.0,
+          "pred": 17.7016544342041,
+          "classification_prob": 0.8793038725852966
+        },
+        {
+          "participant_id": "348",
+          "true": 20.0,
+          "pred": 17.735755920410156,
+          "classification_prob": 0.8741199970245361
+        },
+        {
+          "participant_id": "349",
+          "true": 5.0,
+          "pred": 5.863666534423828,
+          "classification_prob": 0.03962630778551102
+        },
+        {
+          "participant_id": "351",
+          "true": 14.0,
+          "pred": 17.769197463989258,
+          "classification_prob": 0.8708075881004333
+        },
+        {
+          "participant_id": "352",
+          "true": 10.0,
+          "pred": 9.68865966796875,
+          "classification_prob": 0.18957945704460144
+        },
+        {
+          "participant_id": "353",
+          "true": 11.0,
+          "pred": 13.330270767211914,
+          "classification_prob": 0.6123167872428894
+        },
+        {
+          "participant_id": "354",
+          "true": 18.0,
+          "pred": 17.75663948059082,
+          "classification_prob": 0.8646721243858337
+        },
+        {
+          "participant_id": "355",
+          "true": 10.0,
+          "pred": 17.172409057617188,
+          "classification_prob": 0.8118769526481628
+        },
+        {
+          "participant_id": "356",
+          "true": 10.0,
+          "pred": 12.181638717651367,
+          "classification_prob": 0.49525392055511475
+        },
+        {
+          "participant_id": "357",
+          "true": 7.0,
+          "pred": 9.14903736114502,
+          "classification_prob": 0.1604679822921753
+        },
+        {
+          "participant_id": "358",
+          "true": 7.0,
+          "pred": 8.666511535644531,
+          "classification_prob": 0.13077835738658905
+        },
+        {
+          "participant_id": "359",
+          "true": 13.0,
+          "pred": 17.519832611083984,
+          "classification_prob": 0.8418033123016357
+        },
+        {
+          "participant_id": "360",
+          "true": 4.0,
+          "pred": -0.2188156247138977,
+          "classification_prob": 0.004897279664874077
+        },
+        {
+          "participant_id": "361",
+          "true": 0.0,
+          "pred": -2.7011258602142334,
+          "classification_prob": 0.006106640212237835
+        },
+        {
+          "participant_id": "362",
+          "true": 20.0,
+          "pred": 17.60968780517578,
+          "classification_prob": 0.8719615936279297
+        },
+        {
+          "participant_id": "363",
+          "true": 0.0,
+          "pred": -2.6002304553985596,
+          "classification_prob": 0.005249034613370895
+        },
+        {
+          "participant_id": "364",
+          "true": 0.0,
+          "pred": -2.6385247707366943,
+          "classification_prob": 0.00532176299020648
+        },
+        {
+          "participant_id": "366",
+          "true": 0.0,
+          "pred": -0.9623703956604004,
+          "classification_prob": 0.004624067805707455
+        },
+        {
+          "participant_id": "367",
+          "true": 19.0,
+          "pred": 17.74728775024414,
+          "classification_prob": 0.8663844466209412
+        },
+        {
+          "participant_id": "368",
+          "true": 7.0,
+          "pred": 5.670804977416992,
+          "classification_prob": 0.040603652596473694
+        },
+        {
+          "participant_id": "369",
+          "true": 0.0,
+          "pred": -2.574429512023926,
+          "classification_prob": 0.005952538922429085
+        },
+        {
+          "participant_id": "370",
+          "true": 0.0,
+          "pred": -2.908823251724243,
+          "classification_prob": 0.006385793909430504
+        },
+        {
+          "participant_id": "372",
+          "true": 13.0,
+          "pred": 15.394068717956543,
+          "classification_prob": 0.8213325142860413
+        },
+        {
+          "participant_id": "375",
+          "true": 5.0,
+          "pred": 1.8487112522125244,
+          "classification_prob": 0.008177496492862701
+        },
+        {
+          "participant_id": "376",
+          "true": 12.0,
+          "pred": 17.253801345825195,
+          "classification_prob": 0.8567668199539185
+        },
+        {
+          "participant_id": "377",
+          "true": 16.0,
+          "pred": 17.27674674987793,
+          "classification_prob": 0.8335968255996704
+        },
+        {
+          "participant_id": "378",
+          "true": 1.0,
+          "pred": -1.806915521621704,
+          "classification_prob": 0.00407347921282053
+        },
+        {
+          "participant_id": "379",
+          "true": 2.0,
+          "pred": -2.7608633041381836,
+          "classification_prob": 0.005567023064941168
+        },
+        {
+          "participant_id": "380",
+          "true": 10.0,
+          "pred": 16.506595611572266,
+          "classification_prob": 0.8150025606155396
+        },
+        {
+          "participant_id": "383",
+          "true": 7.0,
+          "pred": 6.605716705322266,
+          "classification_prob": 0.07730361074209213
+        },
+        {
+          "participant_id": "384",
+          "true": 15.0,
+          "pred": 17.7022762298584,
+          "classification_prob": 0.8641433715820312
+        },
+        {
+          "participant_id": "385",
+          "true": 8.0,
+          "pred": 9.740520477294922,
+          "classification_prob": 0.20582762360572815
+        },
+        {
+          "participant_id": "386",
+          "true": 11.0,
+          "pred": 9.26154613494873,
+          "classification_prob": 0.1623067408800125
+        },
+        {
+          "participant_id": "387",
+          "true": 2.0,
+          "pred": -2.0893423557281494,
+          "classification_prob": 0.004329649731516838
+        },
+        {
+          "participant_id": "389",
+          "true": 14.0,
+          "pred": 17.217620849609375,
+          "classification_prob": 0.852615475654602
+        },
+        {
+          "participant_id": "390",
+          "true": 9.0,
+          "pred": 11.244787216186523,
+          "classification_prob": 0.3116913437843323
+        },
+        {
+          "participant_id": "391",
+          "true": 9.0,
+          "pred": 12.369107246398926,
+          "classification_prob": 0.39375483989715576
+        },
+        {
+          "participant_id": "392",
+          "true": 1.0,
+          "pred": -2.359185218811035,
+          "classification_prob": 0.004385764244943857
+        },
+        {
+          "participant_id": "395",
+          "true": 7.0,
+          "pred": 8.030623435974121,
+          "classification_prob": 0.10912763327360153
+        },
+        {
+          "participant_id": "396",
+          "true": 5.0,
+          "pred": 4.879759788513184,
+          "classification_prob": 0.027028029784560204
+        },
+        {
+          "participant_id": "397",
+          "true": 5.0,
+          "pred": 0.23793041706085205,
+          "classification_prob": 0.005343521945178509
+        },
+        {
+          "participant_id": "399",
+          "true": 7.0,
+          "pred": 7.4552001953125,
+          "classification_prob": 0.08620457351207733
+        },
+        {
+          "participant_id": "400",
+          "true": 7.0,
+          "pred": 8.738450050354004,
+          "classification_prob": 0.13578630983829498
+        },
+        {
+          "participant_id": "403",
+          "true": 0.0,
+          "pred": -2.799870491027832,
+          "classification_prob": 0.00479984562844038
+        },
+        {
+          "participant_id": "404",
+          "true": 0.0,
+          "pred": -2.6366493701934814,
+          "classification_prob": 0.004735703580081463
+        },
+        {
+          "participant_id": "405",
+          "true": 17.0,
+          "pred": 17.736303329467773,
+          "classification_prob": 0.8647401332855225
+        },
+        {
+          "participant_id": "406",
+          "true": 2.0,
+          "pred": -2.443493127822876,
+          "classification_prob": 0.004540206864476204
+        },
+        {
+          "participant_id": "407",
+          "true": 3.0,
+          "pred": -2.5113871097564697,
+          "classification_prob": 0.004617608617991209
+        },
+        {
+          "participant_id": "409",
+          "true": 10.0,
+          "pred": 13.472887992858887,
+          "classification_prob": 0.595814049243927
+        },
+        {
+          "participant_id": "410",
+          "true": 12.0,
+          "pred": 16.709012985229492,
+          "classification_prob": 0.8662825226783752
+        },
+        {
+          "participant_id": "411",
+          "true": 0.0,
+          "pred": -2.8053295612335205,
+          "classification_prob": 0.006271821912378073
+        },
+        {
+          "participant_id": "413",
+          "true": 10.0,
+          "pred": 9.502718925476074,
+          "classification_prob": 0.18648000061511993
+        },
+        {
+          "participant_id": "414",
+          "true": 16.0,
+          "pred": 17.72250747680664,
+          "classification_prob": 0.864422082901001
+        },
+        {
+          "participant_id": "416",
+          "true": 3.0,
+          "pred": -2.868675470352173,
+          "classification_prob": 0.004987016320228577
+        },
+        {
+          "participant_id": "417",
+          "true": 7.0,
+          "pred": 7.53516960144043,
+          "classification_prob": 0.08715073019266129
+        },
+        {
+          "participant_id": "418",
+          "true": 10.0,
+          "pred": 16.81068992614746,
+          "classification_prob": 0.7949386835098267
+        },
+        {
+          "participant_id": "419",
+          "true": 3.0,
+          "pred": -2.6681137084960938,
+          "classification_prob": 0.004825083073228598
+        },
+        {
+          "participant_id": "420",
+          "true": 3.0,
+          "pred": 3.0883920192718506,
+          "classification_prob": 0.02317495457828045
+        },
+        {
+          "participant_id": "421",
+          "true": 10.0,
+          "pred": 11.69974422454834,
+          "classification_prob": 0.4048027992248535
+        },
+        {
+          "participant_id": "422",
+          "true": 12.0,
+          "pred": 17.442813873291016,
+          "classification_prob": 0.8776167035102844
+        },
+        {
+          "participant_id": "424",
+          "true": 3.0,
+          "pred": -2.4191062450408936,
+          "classification_prob": 0.00542327668517828
+        },
+        {
+          "participant_id": "426",
+          "true": 20.0,
+          "pred": 17.746728897094727,
+          "classification_prob": 0.8671417832374573
+        },
+        {
+          "participant_id": "427",
+          "true": 5.0,
+          "pred": 2.415520191192627,
+          "classification_prob": 0.010591515339910984
+        },
+        {
+          "participant_id": "428",
+          "true": 0.0,
+          "pred": -2.6706109046936035,
+          "classification_prob": 0.005051135551184416
+        },
+        {
+          "participant_id": "429",
+          "true": 1.0,
+          "pred": -2.551781177520752,
+          "classification_prob": 0.004696898628026247
+        },
+        {
+          "participant_id": "430",
+          "true": 3.0,
+          "pred": -0.7543997764587402,
+          "classification_prob": 0.004346775356680155
+        },
+        {
+          "participant_id": "432",
+          "true": 1.0,
+          "pred": -2.7773640155792236,
+          "classification_prob": 0.004492867738008499
+        },
+        {
+          "participant_id": "434",
+          "true": 2.0,
+          "pred": -2.2311930656433105,
+          "classification_prob": 0.0046583544462919235
+        },
+        {
+          "participant_id": "436",
+          "true": 0.0,
+          "pred": -2.8174712657928467,
+          "classification_prob": 0.005052854306995869
+        },
+        {
+          "participant_id": "438",
+          "true": 2.0,
+          "pred": -2.5878307819366455,
+          "classification_prob": 0.006120654754340649
+        },
+        {
+          "participant_id": "439",
+          "true": 1.0,
+          "pred": -2.7602035999298096,
+          "classification_prob": 0.0057576801627874374
+        },
+        {
+          "participant_id": "440",
+          "true": 19.0,
+          "pred": 17.69658088684082,
+          "classification_prob": 0.874414324760437
+        },
+        {
+          "participant_id": "443",
+          "true": 1.0,
+          "pred": -2.2912068367004395,
+          "classification_prob": 0.005841655191034079
+        },
+        {
+          "participant_id": "444",
+          "true": 7.0,
+          "pred": 5.631882667541504,
+          "classification_prob": 0.039159227162599564
+        },
+        {
+          "participant_id": "445",
+          "true": 1.0,
+          "pred": -2.3290956020355225,
+          "classification_prob": 0.004293625243008137
+        },
+        {
+          "participant_id": "446",
+          "true": 0.0,
+          "pred": -2.7698378562927246,
+          "classification_prob": 0.004829925484955311
+        },
+        {
+          "participant_id": "447",
+          "true": 1.0,
+          "pred": -2.2267873287200928,
+          "classification_prob": 0.005105255171656609
+        },
+        {
+          "participant_id": "449",
+          "true": 2.0,
+          "pred": -2.524383783340454,
+          "classification_prob": 0.005283065140247345
+        },
+        {
+          "participant_id": "450",
+          "true": 9.0,
+          "pred": 7.780455589294434,
+          "classification_prob": 0.09564397484064102
+        },
+        {
+          "participant_id": "452",
+          "true": 1.0,
+          "pred": -2.9294188022613525,
+          "classification_prob": 0.004884724039584398
+        },
+        {
+          "participant_id": "453",
+          "true": 17.0,
+          "pred": 17.75094223022461,
+          "classification_prob": 0.8573323488235474
+        },
+        {
+          "participant_id": "456",
+          "true": 6.0,
+          "pred": 5.231265068054199,
+          "classification_prob": 0.0316801518201828
+        },
+        {
+          "participant_id": "457",
+          "true": 3.0,
+          "pred": -2.3335113525390625,
+          "classification_prob": 0.00437086122110486
+        },
+        {
+          "participant_id": "458",
+          "true": 5.0,
+          "pred": -0.04178893566131592,
+          "classification_prob": 0.004923702217638493
+        },
+        {
+          "participant_id": "459",
+          "true": 16.0,
+          "pred": 17.766286849975586,
+          "classification_prob": 0.8634755611419678
+        },
+        {
+          "participant_id": "461",
+          "true": 17.0,
+          "pred": 17.67522430419922,
+          "classification_prob": 0.874536395072937
+        },
+        {
+          "participant_id": "462",
+          "true": 9.0,
+          "pred": 8.628419876098633,
+          "classification_prob": 0.12388334423303604
+        },
+        {
+          "participant_id": "463",
+          "true": 0.0,
+          "pred": -2.619722604751587,
+          "classification_prob": 0.005144536029547453
+        },
+        {
+          "participant_id": "464",
+          "true": 0.0,
+          "pred": -2.6422150135040283,
+          "classification_prob": 0.005600832402706146
+        },
+        {
+          "participant_id": "466",
+          "true": 9.0,
+          "pred": 9.900860786437988,
+          "classification_prob": 0.2239522784948349
+        },
+        {
+          "participant_id": "467",
+          "true": 0.0,
+          "pred": -2.808990716934204,
+          "classification_prob": 0.005325729493051767
+        },
+        {
+          "participant_id": "469",
+          "true": 3.0,
+          "pred": -2.7970967292785645,
+          "classification_prob": 0.005940103903412819
+        },
+        {
+          "participant_id": "470",
+          "true": 3.0,
+          "pred": -1.137244701385498,
+          "classification_prob": 0.004267142154276371
+        },
+        {
+          "participant_id": "471",
+          "true": 0.0,
+          "pred": -2.547673463821411,
+          "classification_prob": 0.004949965514242649
+        },
+        {
+          "participant_id": "472",
+          "true": 3.0,
+          "pred": -2.2738592624664307,
+          "classification_prob": 0.004548302385956049
+        },
+        {
+          "participant_id": "474",
+          "true": 4.0,
+          "pred": 2.784519672393799,
+          "classification_prob": 0.010168174281716347
+        },
+        {
+          "participant_id": "476",
+          "true": 3.0,
+          "pred": -1.4251153469085693,
+          "classification_prob": 0.004254789091646671
+        },
+        {
+          "participant_id": "477",
+          "true": 2.0,
+          "pred": -2.569214105606079,
+          "classification_prob": 0.00491091376170516
+        },
+        {
+          "participant_id": "478",
+          "true": 1.0,
+          "pred": -2.806746244430542,
+          "classification_prob": 0.006314343772828579
+        },
+        {
+          "participant_id": "481",
+          "true": 7.0,
+          "pred": 7.869706153869629,
+          "classification_prob": 0.1015043556690216
+        },
+        {
+          "participant_id": "482",
+          "true": 1.0,
+          "pred": -2.2959675788879395,
+          "classification_prob": 0.005021895747631788
+        },
+        {
+          "participant_id": "483",
+          "true": 15.0,
+          "pred": 17.706951141357422,
+          "classification_prob": 0.8568853139877319
+        },
+        {
+          "participant_id": "485",
+          "true": 2.0,
+          "pred": -2.619804620742798,
+          "classification_prob": 0.005643543321639299
+        },
+        {
+          "participant_id": "487",
+          "true": 0.0,
+          "pred": -2.8626692295074463,
+          "classification_prob": 0.006520039867609739
+        },
+        {
+          "participant_id": "488",
+          "true": 0.0,
+          "pred": -2.6626269817352295,
+          "classification_prob": 0.006042800843715668
+        },
+        {
+          "participant_id": "489",
+          "true": 3.0,
+          "pred": -2.8166182041168213,
+          "classification_prob": 0.005448354873806238
+        },
+        {
+          "participant_id": "490",
+          "true": 2.0,
+          "pred": -2.307001829147339,
+          "classification_prob": 0.005169667769223452
+        },
+        {
+          "participant_id": "491",
+          "true": 8.0,
+          "pred": 7.578611373901367,
+          "classification_prob": 0.08205302804708481
+        },
+        {
+          "participant_id": "492",
+          "true": 0.0,
+          "pred": -2.678218126296997,
+          "classification_prob": 0.005228935740888119
+        },
+        {
+          "participant_id": "601",
+          "true": 0.0,
+          "pred": -2.713813543319702,
+          "classification_prob": 0.004965375177562237
+        },
+        {
+          "participant_id": "603",
+          "true": 4.0,
+          "pred": -1.3912163972854614,
+          "classification_prob": 0.004380797501653433
+        },
+        {
+          "participant_id": "608",
+          "true": 2.0,
+          "pred": -2.247905969619751,
+          "classification_prob": 0.004901499021798372
+        },
+        {
+          "participant_id": "612",
+          "true": 1.0,
+          "pred": -1.3106706142425537,
+          "classification_prob": 0.004053350538015366
+        },
+        {
+          "participant_id": "628",
+          "true": 0.0,
+          "pred": -2.782463788986206,
+          "classification_prob": 0.005239927675575018
+        },
+        {
+          "participant_id": "633",
+          "true": 10.0,
+          "pred": 10.869830131530762,
+          "classification_prob": 0.2912406921386719
+        },
+        {
+          "participant_id": "641",
+          "true": 17.0,
+          "pred": 17.708581924438477,
+          "classification_prob": 0.8647493124008179
+        },
+        {
+          "participant_id": "654",
+          "true": 6.0,
+          "pred": 6.555916786193848,
+          "classification_prob": 0.05884271487593651
+        },
+        {
+          "participant_id": "660",
+          "true": 2.0,
+          "pred": -1.7430055141448975,
+          "classification_prob": 0.004616476129740477
+        },
+        {
+          "participant_id": "662",
+          "true": 2.0,
+          "pred": -2.580357789993286,
+          "classification_prob": 0.0051167551428079605
+        },
+        {
+          "participant_id": "673",
+          "true": 13.0,
+          "pred": 17.33831787109375,
+          "classification_prob": 0.8392274379730225
+        },
+        {
+          "participant_id": "677",
+          "true": 12.0,
+          "pred": 17.45810890197754,
+          "classification_prob": 0.8525305986404419
+        },
+        {
+          "participant_id": "680",
+          "true": 22.0,
+          "pred": 17.74927520751953,
+          "classification_prob": 0.8774586915969849
+        },
+        {
+          "participant_id": "684",
+          "true": 18.0,
+          "pred": 17.75958824157715,
+          "classification_prob": 0.8685077428817749
+        },
+        {
+          "participant_id": "692",
+          "true": 0.0,
+          "pred": -2.62573504447937,
+          "classification_prob": 0.00512854615226388
+        },
+        {
+          "participant_id": "695",
+          "true": 7.0,
+          "pred": 8.469611167907715,
+          "classification_prob": 0.11767759919166565
+        },
+        {
+          "participant_id": "697",
+          "true": 5.0,
+          "pred": 2.0916833877563477,
+          "classification_prob": 0.009128505364060402
+        },
+        {
+          "participant_id": "702",
+          "true": 0.0,
+          "pred": -2.651092052459717,
+          "classification_prob": 0.00627439608797431
+        },
+        {
+          "participant_id": "703",
+          "true": 8.0,
+          "pred": 7.799260139465332,
+          "classification_prob": 0.09397397935390472
+        },
+        {
+          "participant_id": "707",
+          "true": 1.0,
+          "pred": -2.4864695072174072,
+          "classification_prob": 0.004972224123775959
+        }
+      ]
+    },
+    "dev": {
+      "n": 56,
+      "regression": {
+        "ccc": 0.5458228855767737,
+        "rmse": 5.261365868556008,
+        "mae": 4.327601299754211
+      },
+      "binary_from_regression_phq10": {
+        "tp": 4,
+        "tn": 37,
+        "fp": 4,
+        "fn": 11,
+        "precision": 0.5,
+        "recall": 0.26666666666666666,
+        "f1": 0.3478260869565218,
+        "accuracy": 0.7321428571428571,
+        "positives": 15,
+        "n": 56
+      },
+      "classification_head_threshold_0_5": {
+        "tp": 3,
+        "tn": 42,
+        "fp": 2,
+        "fn": 9,
+        "precision": 0.6,
+        "recall": 0.25,
+        "f1": 0.35294117647058826,
+        "accuracy": 0.8035714285714286,
+        "positives": 12,
+        "n": 56
+      },
+      "mean_gate_weights": {
+        "audio": 0.281267911195755,
+        "video": 0.30563101172447205,
+        "text": 0.41310104727745056
+      },
+      "std_gate_weights": {
+        "audio": 0.030997997149825096,
+        "video": 0.04035726934671402,
+        "text": 0.05940645933151245
+      },
+      "mean_modality_confidence": {
+        "audio": 0.0025469500105828047,
+        "video": 0.005259384401142597,
+        "text": 1.444300687580835e-05
+      },
+      "predictions": [
+        {
+          "participant_id": "300",
+          "true": 2.0,
+          "pred": -1.927849531173706,
+          "classification_prob": 0.004475997295230627
+        },
+        {
+          "participant_id": "301",
+          "true": 3.0,
+          "pred": 7.202430725097656,
+          "classification_prob": 0.07542391121387482
+        },
+        {
+          "participant_id": "306",
+          "true": 0.0,
+          "pred": 7.044038772583008,
+          "classification_prob": 0.07823807001113892
+        },
+        {
+          "participant_id": "317",
+          "true": 8.0,
+          "pred": 0.4053730368614197,
+          "classification_prob": 0.005410501733422279
+        },
+        {
+          "participant_id": "320",
+          "true": 11.0,
+          "pred": 9.797968864440918,
+          "classification_prob": 0.2101908177137375
+        },
+        {
+          "participant_id": "321",
+          "true": 20.0,
+          "pred": 17.226064682006836,
+          "classification_prob": 0.8468949794769287
+        },
+        {
+          "participant_id": "331",
+          "true": 8.0,
+          "pred": 17.21149253845215,
+          "classification_prob": 0.821612536907196
+        },
+        {
+          "participant_id": "334",
+          "true": 5.0,
+          "pred": -1.170648455619812,
+          "classification_prob": 0.004572601057589054
+        },
+        {
+          "participant_id": "336",
+          "true": 7.0,
+          "pred": 6.139335632324219,
+          "classification_prob": 0.043350253254175186
+        },
+        {
+          "participant_id": "343",
+          "true": 9.0,
+          "pred": 4.641573905944824,
+          "classification_prob": 0.021639011800289154
+        },
+        {
+          "participant_id": "344",
+          "true": 11.0,
+          "pred": 6.739272117614746,
+          "classification_prob": 0.05381133034825325
+        },
+        {
+          "participant_id": "347",
+          "true": 16.0,
+          "pred": 3.876912832260132,
+          "classification_prob": 0.015732605010271072
+        },
+        {
+          "participant_id": "350",
+          "true": 11.0,
+          "pred": 5.170812606811523,
+          "classification_prob": 0.03062686137855053
+        },
+        {
+          "participant_id": "365",
+          "true": 12.0,
+          "pred": 15.769043922424316,
+          "classification_prob": 0.7390496730804443
+        },
+        {
+          "participant_id": "371",
+          "true": 9.0,
+          "pred": 7.923893928527832,
+          "classification_prob": 0.10035020858049393
+        },
+        {
+          "participant_id": "373",
+          "true": 9.0,
+          "pred": 1.884848713874817,
+          "classification_prob": 0.007995120249688625
+        },
+        {
+          "participant_id": "374",
+          "true": 2.0,
+          "pred": 4.03678560256958,
+          "classification_prob": 0.017813855782151222
+        },
+        {
+          "participant_id": "381",
+          "true": 16.0,
+          "pred": 8.873330116271973,
+          "classification_prob": 0.14089730381965637
+        },
+        {
+          "participant_id": "382",
+          "true": 0.0,
+          "pred": -1.7697162628173828,
+          "classification_prob": 0.004465472884476185
+        },
+        {
+          "participant_id": "388",
+          "true": 17.0,
+          "pred": 8.325582504272461,
+          "classification_prob": 0.11817102134227753
+        },
+        {
+          "participant_id": "393",
+          "true": 2.0,
+          "pred": -2.4084746837615967,
+          "classification_prob": 0.004165838938206434
+        },
+        {
+          "participant_id": "401",
+          "true": 9.0,
+          "pred": 7.180840492248535,
+          "classification_prob": 0.08088265359401703
+        },
+        {
+          "participant_id": "402",
+          "true": 11.0,
+          "pred": 8.223179817199707,
+          "classification_prob": 0.11382626742124557
+        },
+        {
+          "participant_id": "408",
+          "true": 0.0,
+          "pred": -2.2987639904022217,
+          "classification_prob": 0.00495864637196064
+        },
+        {
+          "participant_id": "412",
+          "true": 12.0,
+          "pred": 1.418591856956482,
+          "classification_prob": 0.007236860226839781
+        },
+        {
+          "participant_id": "415",
+          "true": 3.0,
+          "pred": 0.9966039657592773,
+          "classification_prob": 0.006239940878003836
+        },
+        {
+          "participant_id": "423",
+          "true": 0.0,
+          "pred": 10.472107887268066,
+          "classification_prob": 0.2748931646347046
+        },
+        {
+          "participant_id": "425",
+          "true": 6.0,
+          "pred": 7.463340759277344,
+          "classification_prob": 0.09347035735845566
+        },
+        {
+          "participant_id": "431",
+          "true": 2.0,
+          "pred": 3.0117270946502686,
+          "classification_prob": 0.012416070327162743
+        },
+        {
+          "participant_id": "433",
+          "true": 10.0,
+          "pred": 6.196249008178711,
+          "classification_prob": 0.04374334216117859
+        },
+        {
+          "participant_id": "435",
+          "true": 8.0,
+          "pred": 5.647822380065918,
+          "classification_prob": 0.031754445284605026
+        },
+        {
+          "participant_id": "437",
+          "true": 0.0,
+          "pred": -2.148568868637085,
+          "classification_prob": 0.004340747371315956
+        },
+        {
+          "participant_id": "441",
+          "true": 18.0,
+          "pred": 15.168447494506836,
+          "classification_prob": 0.7204365730285645
+        },
+        {
+          "participant_id": "442",
+          "true": 6.0,
+          "pred": 8.38577651977539,
+          "classification_prob": 0.12134066224098206
+        },
+        {
+          "participant_id": "448",
+          "true": 18.0,
+          "pred": 7.8956146240234375,
+          "classification_prob": 0.0990234762430191
+        },
+        {
+          "participant_id": "451",
+          "true": 4.0,
+          "pred": 6.27988338470459,
+          "classification_prob": 0.04646382853388786
+        },
+        {
+          "participant_id": "454",
+          "true": 1.0,
+          "pred": 0.8977743983268738,
+          "classification_prob": 0.006047840230166912
+        },
+        {
+          "participant_id": "455",
+          "true": 1.0,
+          "pred": -2.8706414699554443,
+          "classification_prob": 0.005362141411751509
+        },
+        {
+          "participant_id": "465",
+          "true": 2.0,
+          "pred": -2.428835153579712,
+          "classification_prob": 0.005582497920840979
+        },
+        {
+          "participant_id": "468",
+          "true": 4.0,
+          "pred": 0.9159560799598694,
+          "classification_prob": 0.005922242533415556
+        },
+        {
+          "participant_id": "473",
+          "true": 0.0,
+          "pred": 1.678383469581604,
+          "classification_prob": 0.007913661189377308
+        },
+        {
+          "participant_id": "475",
+          "true": 6.0,
+          "pred": 4.702750205993652,
+          "classification_prob": 0.025710124522447586
+        },
+        {
+          "participant_id": "479",
+          "true": 7.0,
+          "pred": 2.1552586555480957,
+          "classification_prob": 0.00848772656172514
+        },
+        {
+          "participant_id": "480",
+          "true": 1.0,
+          "pred": 6.342655181884766,
+          "classification_prob": 0.05883534625172615
+        },
+        {
+          "participant_id": "484",
+          "true": 9.0,
+          "pred": 8.689105987548828,
+          "classification_prob": 0.12847574055194855
+        },
+        {
+          "participant_id": "486",
+          "true": 4.0,
+          "pred": -1.7753772735595703,
+          "classification_prob": 0.004427636042237282
+        },
+        {
+          "participant_id": "617",
+          "true": 12.0,
+          "pred": 7.020135879516602,
+          "classification_prob": 0.07998471707105637
+        },
+        {
+          "participant_id": "627",
+          "true": 3.0,
+          "pred": 4.793652534484863,
+          "classification_prob": 0.025294799357652664
+        },
+        {
+          "participant_id": "632",
+          "true": 1.0,
+          "pred": 4.741192817687988,
+          "classification_prob": 0.024204665794968605
+        },
+        {
+          "participant_id": "653",
+          "true": 4.0,
+          "pred": -1.7987372875213623,
+          "classification_prob": 0.0045471154153347015
+        },
+        {
+          "participant_id": "657",
+          "true": 0.0,
+          "pred": -0.8814413547515869,
+          "classification_prob": 0.004417325370013714
+        },
+        {
+          "participant_id": "667",
+          "true": 3.0,
+          "pred": 8.21164321899414,
+          "classification_prob": 0.10926169902086258
+        },
+        {
+          "participant_id": "670",
+          "true": 0.0,
+          "pred": 10.97702693939209,
+          "classification_prob": 0.2959136366844177
+        },
+        {
+          "participant_id": "687",
+          "true": 7.0,
+          "pred": 12.464341163635254,
+          "classification_prob": 0.5209924578666687
+        },
+        {
+          "participant_id": "698",
+          "true": 19.0,
+          "pred": 11.247485160827637,
+          "classification_prob": 0.36130422353744507
+        },
+        {
+          "participant_id": "713",
+          "true": 0.0,
+          "pred": 1.1418808698654175,
+          "classification_prob": 0.006921511609107256
+        }
+      ]
+    },
+    "test": {
+      "n": 56,
+      "regression": {
+        "ccc": 0.5365,
+        "rmse": 7.336850227514537,
+        "mae": 5.8380978128739764
+      },
+      "binary_from_regression_phq10": {
+        "tp": 1,
+        "tn": 33,
+        "fp": 2,
+        "fn": 20,
+        "precision": 0.3333333333333333,
+        "recall": 0.047619047619047616,
+        "f1": 0.08333333333333333,
+        "accuracy": 0.6071428571428571,
+        "positives": 21,
+        "n": 56
+      },
+      "classification_head_threshold_0_5": {
+        "tp": 0,
+        "tn": 38,
+        "fp": 1,
+        "fn": 17,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "accuracy": 0.6785714285714286,
+        "positives": 17,
+        "n": 56
+      },
+      "mean_gate_weights": {
+        "audio": 0.27441054582595825,
+        "video": 0.3090582489967346,
+        "text": 0.41653114557266235
+      },
+      "std_gate_weights": {
+        "audio": 0.0376964695751667,
+        "video": 0.0305629875510931,
+        "text": 0.06003354489803314
+      },
+      "mean_modality_confidence": {
+        "audio": 0.0028655545320361853,
+        "video": 0.006203194614499807,
+        "text": 1.2258656170160975e-05
+      },
+      "predictions": [
+        {
+          "participant_id": "600",
+          "true": 5.0,
+          "pred": 9.059393882751465,
+          "classification_prob": 0.15492525696754456
+        },
+        {
+          "participant_id": "602",
+          "true": 13.0,
+          "pred": -1.2858893871307373,
+          "classification_prob": 0.004285138566046953
+        },
+        {
+          "participant_id": "604",
+          "true": 12.0,
+          "pred": 7.277626991271973,
+          "classification_prob": 0.08682170510292053
+        },
+        {
+          "participant_id": "605",
+          "true": 2.0,
+          "pred": 6.684786796569824,
+          "classification_prob": 0.059092748910188675
+        },
+        {
+          "participant_id": "606",
+          "true": 5.0,
+          "pred": 6.54508113861084,
+          "classification_prob": 0.05734863504767418
+        },
+        {
+          "participant_id": "607",
+          "true": 7.0,
+          "pred": 10.489572525024414,
+          "classification_prob": 0.24887840449810028
+        },
+        {
+          "participant_id": "609",
+          "true": 0.0,
+          "pred": -1.934345006942749,
+          "classification_prob": 0.004367985762655735
+        },
+        {
+          "participant_id": "615",
+          "true": 3.0,
+          "pred": 3.91949200630188,
+          "classification_prob": 0.015521692112088203
+        },
+        {
+          "participant_id": "618",
+          "true": 4.0,
+          "pred": 6.572378158569336,
+          "classification_prob": 0.05739924684166908
+        },
+        {
+          "participant_id": "619",
+          "true": 6.0,
+          "pred": 3.594616413116455,
+          "classification_prob": 0.016433125361800194
+        },
+        {
+          "participant_id": "620",
+          "true": 0.0,
+          "pred": -0.4207925796508789,
+          "classification_prob": 0.004764671437442303
+        },
+        {
+          "participant_id": "622",
+          "true": 0.0,
+          "pred": 5.159087181091309,
+          "classification_prob": 0.03169185668230057
+        },
+        {
+          "participant_id": "623",
+          "true": 9.0,
+          "pred": 1.041023850440979,
+          "classification_prob": 0.006357220932841301
+        },
+        {
+          "participant_id": "624",
+          "true": 22.0,
+          "pred": 12.99870777130127,
+          "classification_prob": 0.47232940793037415
+        },
+        {
+          "participant_id": "625",
+          "true": 2.0,
+          "pred": -2.8079047203063965,
+          "classification_prob": 0.005510682240128517
+        },
+        {
+          "participant_id": "626",
+          "true": 0.0,
+          "pred": 3.209016799926758,
+          "classification_prob": 0.012491917237639427
+        },
+        {
+          "participant_id": "629",
+          "true": 0.0,
+          "pred": -1.4335607290267944,
+          "classification_prob": 0.004232493694871664
+        },
+        {
+          "participant_id": "631",
+          "true": 0.0,
+          "pred": 8.362883567810059,
+          "classification_prob": 0.1193210557103157
+        },
+        {
+          "participant_id": "634",
+          "true": 2.0,
+          "pred": -2.572521209716797,
+          "classification_prob": 0.004948685877025127
+        },
+        {
+          "participant_id": "635",
+          "true": 9.0,
+          "pred": 6.894871711730957,
+          "classification_prob": 0.07151304930448532
+        },
+        {
+          "participant_id": "636",
+          "true": 15.0,
+          "pred": -0.1261233687400818,
+          "classification_prob": 0.00515708327293396
+        },
+        {
+          "participant_id": "637",
+          "true": 16.0,
+          "pred": 7.465227127075195,
+          "classification_prob": 0.08435522019863129
+        },
+        {
+          "participant_id": "638",
+          "true": 19.0,
+          "pred": 3.5419325828552246,
+          "classification_prob": 0.016843389719724655
+        },
+        {
+          "participant_id": "640",
+          "true": 17.0,
+          "pred": 0.28473395109176636,
+          "classification_prob": 0.0055811237543821335
+        },
+        {
+          "participant_id": "649",
+          "true": 19.0,
+          "pred": 1.9744420051574707,
+          "classification_prob": 0.007893399335443974
+        },
+        {
+          "participant_id": "650",
+          "true": 3.0,
+          "pred": 4.796674728393555,
+          "classification_prob": 0.02521090768277645
+        },
+        {
+          "participant_id": "651",
+          "true": 5.0,
+          "pred": 5.172823905944824,
+          "classification_prob": 0.03262702748179436
+        },
+        {
+          "participant_id": "652",
+          "true": 7.0,
+          "pred": 4.543325424194336,
+          "classification_prob": 0.02027321234345436
+        },
+        {
+          "participant_id": "655",
+          "true": 12.0,
+          "pred": 7.004261016845703,
+          "classification_prob": 0.06270542740821838
+        },
+        {
+          "participant_id": "656",
+          "true": 8.0,
+          "pred": -1.5844135284423828,
+          "classification_prob": 0.004233319777995348
+        },
+        {
+          "participant_id": "658",
+          "true": 11.0,
+          "pred": 7.998048782348633,
+          "classification_prob": 0.10053037106990814
+        },
+        {
+          "participant_id": "659",
+          "true": 16.0,
+          "pred": 7.588113784790039,
+          "classification_prob": 0.0795561745762825
+        },
+        {
+          "participant_id": "661",
+          "true": 19.0,
+          "pred": 8.793961524963379,
+          "classification_prob": 0.130922332406044
+        },
+        {
+          "participant_id": "663",
+          "true": 9.0,
+          "pred": 6.1697235107421875,
+          "classification_prob": 0.052128203213214874
+        },
+        {
+          "participant_id": "664",
+          "true": 2.0,
+          "pred": -2.4134294986724854,
+          "classification_prob": 0.0058881486766040325
+        },
+        {
+          "participant_id": "666",
+          "true": 5.0,
+          "pred": -2.2385141849517822,
+          "classification_prob": 0.005411512218415737
+        },
+        {
+          "participant_id": "669",
+          "true": 7.0,
+          "pred": 9.297165870666504,
+          "classification_prob": 0.16323032975196838
+        },
+        {
+          "participant_id": "676",
+          "true": 0.0,
+          "pred": 5.323834419250488,
+          "classification_prob": 0.03410647064447403
+        },
+        {
+          "participant_id": "679",
+          "true": 8.0,
+          "pred": 6.807068824768066,
+          "classification_prob": 0.06160852685570717
+        },
+        {
+          "participant_id": "682",
+          "true": 12.0,
+          "pred": -0.015018105506896973,
+          "classification_prob": 0.005038257222622633
+        },
+        {
+          "participant_id": "683",
+          "true": 6.0,
+          "pred": 15.846915245056152,
+          "classification_prob": 0.8235979080200195
+        },
+        {
+          "participant_id": "688",
+          "true": 19.0,
+          "pred": 8.103864669799805,
+          "classification_prob": 0.10100173950195312
+        },
+        {
+          "participant_id": "689",
+          "true": 13.0,
+          "pred": 7.086850166320801,
+          "classification_prob": 0.0710073933005333
+        },
+        {
+          "participant_id": "691",
+          "true": 11.0,
+          "pred": 4.278418064117432,
+          "classification_prob": 0.017222750931978226
+        },
+        {
+          "participant_id": "693",
+          "true": 3.0,
+          "pred": 8.25493335723877,
+          "classification_prob": 0.11043182015419006
+        },
+        {
+          "participant_id": "696",
+          "true": 13.0,
+          "pred": 9.885723114013672,
+          "classification_prob": 0.2073722630739212
+        },
+        {
+          "participant_id": "699",
+          "true": 16.0,
+          "pred": 3.09250545501709,
+          "classification_prob": 0.012217508628964424
+        },
+        {
+          "participant_id": "705",
+          "true": 20.0,
+          "pred": 8.780296325683594,
+          "classification_prob": 0.133470356464386
+        },
+        {
+          "participant_id": "708",
+          "true": 0.0,
+          "pred": 4.296177864074707,
+          "classification_prob": 0.022100703790783882
+        },
+        {
+          "participant_id": "709",
+          "true": 10.0,
+          "pred": 7.028624534606934,
+          "classification_prob": 0.07091907411813736
+        },
+        {
+          "participant_id": "710",
+          "true": 7.0,
+          "pred": 8.182733535766602,
+          "classification_prob": 0.10083416849374771
+        },
+        {
+          "participant_id": "712",
+          "true": 0.0,
+          "pred": -2.5241692066192627,
+          "classification_prob": 0.005185303278267384
+        },
+        {
+          "participant_id": "715",
+          "true": 7.0,
+          "pred": 7.557530403137207,
+          "classification_prob": 0.09156560152769089
+        },
+        {
+          "participant_id": "716",
+          "true": 15.0,
+          "pred": 8.148886680603027,
+          "classification_prob": 0.10400847345590591
+        },
+        {
+          "participant_id": "717",
+          "true": 1.0,
+          "pred": 6.309250831604004,
+          "classification_prob": 0.04725511372089386
+        },
+        {
+          "participant_id": "718",
+          "true": 3.0,
+          "pred": 3.9199180603027344,
+          "classification_prob": 0.018151206895709038
+        }
+      ]
+    }
+  }
+}

@@ -102,6 +102,20 @@ export default function SignIn() {
 
       navigate("/");
     } catch (loginError) {
+      // If the error message indicates email is not verified, redirect to OTP verification
+      if (
+        loginError.message &&
+        (loginError.message.toLowerCase().includes("verified") ||
+          loginError.message.toLowerCase().includes("otp"))
+      ) {
+        navigate("/verify-otp", {
+          state: {
+            email: form.email.trim(),
+          },
+        });
+        return;
+      }
+
       // Normal login failed — try admin login as fallback
       try {
         await loginAdmin({

@@ -28,9 +28,13 @@ echo   Port:      %PORT%
 echo   Log Level: %LOG_LEVEL%
 echo.
 echo Endpoints:
-echo   POST http://%HOST%:%PORT%/predict        - Single file prediction
-echo   POST http://%HOST%:%PORT%/predict/batch   - Batch prediction
-echo   GET  http://%HOST%:%PORT%/health          - Health check
+echo   POST http://%HOST%:%PORT%/predict              - Single file prediction (audio-only)
+echo   POST http://%HOST%:%PORT%/predict/batch        - Batch prediction
+echo   POST http://%HOST%:%PORT%/predict/multimodal   - Multimodal prediction (audio+video+text)
+echo   GET  http://%HOST%:%PORT%/health               - Health check
+echo.
+echo Classification mode: num_classes=2 in config enables binary depression detection
+echo   Output: depression_probability, predicted_label (0/1), phq8_score (scaled)
 echo.
 echo Starting server (Ctrl+C to stop)...
 echo ------------------------------------------
