@@ -12,6 +12,7 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/labels.csv
+data/*zip
 
 # Training logs & run artifacts
 logs/
